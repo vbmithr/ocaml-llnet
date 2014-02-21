@@ -10,5 +10,11 @@ BuildTools: ocamlbuild
 Library llnet
   Path: lib
   Modules: Llnet
-  BuildDepends: ipaddr, lwt.unix, ocplib-endian, sockopt
+  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit
+  CompiledObject: best
+
+Executable test_membership
+  Path: test
+  MainIs: test_membership.ml
+  BuildDepends: llnet
   CompiledObject: best

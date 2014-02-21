@@ -1,9 +1,9 @@
 # OASIS_START
-# DO NOT EDIT (digest: 459e70cb3feaf8c7ae1d27eae4a61928)
+# DO NOT EDIT (digest: 997aa4baaa6a92d505a7f69b4944442d)
 version = "0.1"
 description =
-"Simple library to communicate unreliably in an IPv6 multicast network"
-requires = "ipaddr lwt.unix ocplib-endian sockopt"
+"Simple library to communicate (unreliably) within an IPv6 multicast network"
+requires = "ipaddr.unix lwt.unix ocplib-endian sockopt cryptokit"
 archive(byte) = "llnet.cma"
 archive(byte, plugin) = "llnet.cma"
 archive(native) = "llnet.cmxa"
