@@ -13,8 +13,15 @@ Library llnet
   BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit
   CompiledObject: best
 
+Library irmindistributed
+  Path: irminsule
+  Modules: IrminDistributed
+  BuildDepends: irminsule, llnet
+  CompiledObject: best
+
 Executable test_membership
   Path: test
   MainIs: test_membership.ml
   BuildDepends: llnet
   CompiledObject: best
+  Install: false

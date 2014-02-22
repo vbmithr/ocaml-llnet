@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 2ccedc0f7e87802dce78f2938acaddd5)
+# DO NOT EDIT (digest: a13d10402821fce745fe9b2f836b12f6)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -20,6 +20,15 @@
 <lib/*.ml{,i}>: pkg_ocplib-endian
 <lib/*.ml{,i}>: pkg_sockopt
 <lib/*.ml{,i}>: pkg_cryptokit
+# Library irmindistributed
+"irminsule/irmindistributed.cmxs": use_irmindistributed
+<irminsule/*.ml{,i}>: use_llnet
+<irminsule/*.ml{,i}>: pkg_irminsule
+<irminsule/*.ml{,i}>: pkg_ipaddr.unix
+<irminsule/*.ml{,i}>: pkg_lwt.unix
+<irminsule/*.ml{,i}>: pkg_ocplib-endian
+<irminsule/*.ml{,i}>: pkg_sockopt
+<irminsule/*.ml{,i}>: pkg_cryptokit
 # Executable test_membership
 <test/test_membership.{native,byte}>: use_llnet
 <test/test_membership.{native,byte}>: pkg_ipaddr.unix

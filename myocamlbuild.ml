@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: be9f53f15fe1fb7819b3e0f0db007394) *)
+(* DO NOT EDIT (digest: 566532a3dd2e17a9658f8d995c048379) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -555,15 +555,16 @@ end
 open Ocamlbuild_plugin;;
 let package_default =
   {
-     MyOCamlbuildBase.lib_ocaml = [("llnet", ["lib"], [])];
+     MyOCamlbuildBase.lib_ocaml =
+       [("llnet", ["lib"], []); ("irmindistributed", ["irminsule"], [])];
      lib_c = [];
      flags = [];
-     includes = [("test", ["lib"])]
+     includes = [("test", ["lib"]); ("irminsule", ["lib"])]
   }
   ;;
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default package_default;;
 
-# 568 "myocamlbuild.ml"
+# 569 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
