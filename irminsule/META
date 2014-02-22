@@ -1,0 +1,13 @@
+# OASIS_START
+# DO NOT EDIT (digest: 50e2da030e77eaf5160db4d7bce085fe)
+version = "0.1"
+description =
+"Simple library to communicate (unreliably) within an IPv6 multicast network"
+requires = "irminsule llnet"
+archive(byte) = "irmindistributed.cma"
+archive(byte, plugin) = "irmindistributed.cma"
+archive(native) = "irmindistributed.cmxa"
+archive(native, plugin) = "irmindistributed.cmxs"
+exists_if = "irmindistributed.cma"
+# OASIS_STOP
+
