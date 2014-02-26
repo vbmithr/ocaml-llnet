@@ -6,9 +6,7 @@ let (>>=) = Lwt.(>>=)
 let main iface addr port =
   let group_reactor _ _ _ = Lwt.return_unit in
   let tcp_reactor _ _ = Lwt.return_unit in
-  let h = connect "eth0" (Ipaddr.V6.of_string_exn "ff02::dead:beef") 5555 group_reactor
-      tcp_reactor
-  in
+  let h = connect iface addr port group_reactor tcp_reactor in
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
     if h.peers <> SaddrMap.empty then
@@ -32,4 +30,4 @@ let () =
   let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options>\nOptions are:" in
   Arg.parse speclist anon_fun usage_msg;
 
-  Lwt_main.run (main !iface !group_addr !group_port)
+  Lwt_main.run (main !iface V6.(of_string_exn !group_addr) !group_port)
