@@ -19,7 +19,7 @@ Library llnet
 
 Library irmindistributed
   Build$: flag(irminsule)
-  Install$: flag (irminsule) 
+  Install$: flag (irminsule)
   Path: irminsule
   Modules: IrminDistributed
   BuildDepends: irminsule, llnet
@@ -31,3 +31,11 @@ Executable test_membership
   BuildDepends: llnet
   CompiledObject: best
   Install: false
+
+Executable test_store
+  Build$: flag(irminsule)
+  Install: false
+  Path: irminsule_test
+  MainIs: test_store.ml
+  CompiledObject: best
+  BuildDepends: irminsule.backend, irmindistributed
