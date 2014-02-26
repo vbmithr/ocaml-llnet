@@ -7,6 +7,10 @@ License: ISC
 Plugins: META (0.4), DevFiles (0.4)
 BuildTools: ocamlbuild
 
+Flag irminsule
+  Description: Build IrminDistributed.
+  Default: true
+
 Library llnet
   Path: lib
   Modules: Llnet
@@ -14,6 +18,8 @@ Library llnet
   CompiledObject: best
 
 Library irmindistributed
+  Build$: flag(irminsule)
+  Install$: flag (irminsule) 
   Path: irminsule
   Modules: IrminDistributed
   BuildDepends: irminsule, llnet
