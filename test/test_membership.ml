@@ -3,7 +3,7 @@ open Ipaddr
 
 let (>>=) = Lwt.(>>=)
 
-let main () =
+let main iface addr port =
   let group_reactor _ _ _ = Lwt.return_unit in
   let tcp_reactor _ _ = Lwt.return_unit in
   let h = connect "eth0" (Ipaddr.V6.of_string_exn "ff02::dead:beef") 5555 group_reactor
@@ -29,7 +29,7 @@ let () =
       "-vv", Unit (fun () -> Lwt_log.(add_rule "*" Debug)), " Be more verbose"
     ]) in
   let anon_fun s = () in
-  let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options> track [tracks...]\nOptions are:" in
+  let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options>\nOptions are:" in
   Arg.parse speclist anon_fun usage_msg;
 
-  Lwt_main.run (main ())
+  Lwt_main.run (main !iface !group_addr !group_port)
