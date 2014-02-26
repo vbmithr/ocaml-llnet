@@ -51,6 +51,12 @@ let saddr_with_port saddr port =
   | ADDR_INET (a, _) -> ADDR_INET (a, port)
   | _ -> raise (Invalid_argument "saddr_with_port")
 
+let v6addr_of_saddr saddr =
+  let open Unix in
+  match saddr with
+  | ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
+  | _ -> raise (Invalid_argument "v6addr_of_saddr")
+
 module type CONFIG = sig
   val iface : string
   val mcast_addr : Ipaddr.V6.t
@@ -59,6 +65,8 @@ end
 
 module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
 
+  type key = AO.key
+  type value = AO.value
   type t = AO.t * Llnet.t
 
   let create () =
@@ -70,28 +78,45 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
 
       | NEWKEY -> (* KEYREQ it *)
         let remote_port = EndianString.BigEndian.get_uint16 msg 3 in
-        let s = Lwt_unix.(socket PF_INET6 SOCK_STREAM 0) in
-        Lwt_unix.connect s (saddr_with_port saddr remote_port) >>= fun () ->
-        msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
-        EndianString.BigEndian.set_int16 msg 3 c.Llnet.tcp_in_port;
-        Lwt_unix.send_from_exactly s msg 0 (String.length msg) []
+        let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
+        Lwt.try_bind
+          (fun () -> Lwt.wrap (fun () ->
+               Sockopt.connect6 ~iface:C.iface s (v6addr_of_saddr saddr) remote_port))
+          (fun () ->
+             let s = Lwt_unix.of_unix_file_descr s in
+             msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
+             EndianString.BigEndian.set_int16 msg 3 c.Llnet.tcp_in_port;
+             Lwt_unix.send_from_exactly s msg 0 (String.length msg) [])
+          (fun exn -> Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
+              Unix.(match saddr with
+                  | ADDR_INET(a, _) -> string_of_inet_addr a
+                  | _ -> assert false) remote_port)
 
       | KEYREQ -> (* Send our keys to peer *)
         let remote_port = EndianString.BigEndian.get_uint16 msg 3 in
-        let s = Lwt_unix.(socket PF_INET6 SOCK_STREAM 0) in
-        Lwt_unix.connect s (saddr_with_port saddr remote_port) >>= fun () ->
-        AO.contents store >>= fun cts ->
-        let all_keys = List.map cts fst in
-        let msg_size = List.fold_left all_keys ~f:(fun a k -> a + 2 + String.length k) ~init:0 in
-        msg.[0] <- int_of_protocol KEYACK |> Char.of_int_exn;
-        EndianString.BigEndian.set_int16 msg 1 msg_size;
-        Lwt_unix.send_from_exactly s msg 0 3 [] >>= fun () ->
-        Lwt_list.iter_s (fun k ->
-            let klen = String.length k in
-            EndianString.BigEndian.set_int16 msg 1 klen;
-            Lwt_unix.send_from_exactly s msg 1 2 [] >>= fun () ->
-            Lwt_unix.send_from_exactly s k 0 klen []
-          ) all_keys
+        let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
+        Lwt.try_bind
+          (fun () -> Lwt.wrap (fun () ->
+               Sockopt.connect6 ~iface:C.iface s (v6addr_of_saddr saddr) remote_port))
+          (fun () ->
+             let s = Lwt_unix.of_unix_file_descr s in
+             AO.contents store >>= fun cts ->
+             let all_keys = List.map cts fst in
+             let msg_size = List.fold_left all_keys ~f:(fun a k -> a + 2 + String.length k) ~init:0 in
+             msg.[0] <- int_of_protocol KEYACK |> Char.of_int_exn;
+             EndianString.BigEndian.set_int16 msg 1 msg_size;
+             Lwt_unix.send_from_exactly s msg 0 3 [] >>= fun () ->
+             Lwt_list.iter_s (fun k ->
+                 let klen = String.length k in
+                 EndianString.BigEndian.set_int16 msg 1 klen;
+                 Lwt_unix.send_from_exactly s msg 1 2 [] >>= fun () ->
+                 Lwt_unix.send_from_exactly s k 0 klen []
+               ) all_keys)
+          (fun exn -> Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
+              Unix.(match saddr with
+                  | ADDR_INET(a, _) -> string_of_inet_addr a
+                  | _ -> assert false) remote_port)
+
       | _ -> Lwt.return_unit (* Ignore all other message types sent to the group socket *)
     in
     let tcp_reactor fd saddr =
@@ -179,4 +204,10 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
     String.blit k 0 msgbuf 5 klen;
     Lwt_unix.sendto c.Llnet.group_sock msgbuf 0 msg_size [] c.Llnet.group_saddr >>= fun (_:int) ->
     Lwt.return k
+
+  let read (store, c) k = AO.read store k
+  let read_exn (store, c) k = AO.read_exn store k
+  let mem (store, c) k = AO.mem store k
+  let list (store, c) k = AO.list store k
+  let contents (store, c) = AO.contents store
 end

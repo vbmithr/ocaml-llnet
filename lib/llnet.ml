@@ -75,6 +75,8 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
     }
   in
 
+  Lwt_log.ign_debug_f "Bound TCP port %d" tcp_in_port;
+
   let idmsg = String.create 5 in
   EndianString.BigEndian.set_int16 idmsg 1 (String.length idmsg - hdr_size);
   EndianString.BigEndian.set_int16 idmsg 3 tcp_in_port;
