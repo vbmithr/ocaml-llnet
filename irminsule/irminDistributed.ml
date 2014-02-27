@@ -86,8 +86,12 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
              let s = Lwt_unix.of_unix_file_descr s in
              msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
              EndianString.BigEndian.set_int16 msg 3 c.Llnet.tcp_in_port;
-             Lwt_unix.send_from_exactly s msg 0 (String.length msg) [])
-          (fun exn -> Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
+             Lwt_unix.send_from_exactly s msg 0 (String.length msg) [] >>= fun () ->
+             Lwt_unix.close s
+          )
+          (fun exn ->
+             Unix.close s;
+             Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
               Unix.(match saddr with
                   | ADDR_INET(a, _) -> string_of_inet_addr a
                   | _ -> assert false) remote_port)
@@ -111,8 +115,12 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
                  EndianString.BigEndian.set_int16 msg 1 klen;
                  Lwt_unix.send_from_exactly s msg 1 2 [] >>= fun () ->
                  Lwt_unix.send_from_exactly s k 0 klen []
-               ) all_keys)
-          (fun exn -> Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
+               ) all_keys >>= fun () ->
+             Lwt_unix.close s
+          )
+          (fun exn ->
+             Unix.close s;
+             Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
               Unix.(match saddr with
                   | ADDR_INET(a, _) -> string_of_inet_addr a
                   | _ -> assert false) remote_port)
