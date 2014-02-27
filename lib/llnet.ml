@@ -1,15 +1,25 @@
 (* GLOBAL CONFIG *)
 
 let init_ttl = 5
-let hdr_size = 3
+let hdr_size = 5
 
 (*****************)
 
 let (>>=) = Lwt.(>>=)
 let (>|=) = Lwt.(>|=)
 
+let section = Lwt_log.Section.make "Llnet"
+
+module Helpers = struct
+  let string_of_saddr saddr =
+    let open Unix in
+    match saddr with
+    | ADDR_INET (a, p) -> Printf.sprintf "[%s]:%d" (string_of_inet_addr a) p
+    | ADDR_UNIX p -> Printf.sprintf "unix://%s" p
+end
+
 module SaddrMap = Map.Make(struct
-    type t = Ipaddr.V6.t * int
+    type t = Unix.sockaddr
     let compare = Pervasives.compare
   end)
 
@@ -20,26 +30,17 @@ type t = {
   group_saddr: Unix.sockaddr;
   tcp_in_sock: Lwt_unix.file_descr;
   tcp_in_port: int;
-  mutable peers: int SaddrMap.t;
+  mutable peers: (int * bool) SaddrMap.t;
 }
 
 type typ =
-  | HELLO
-  | HELLOACK
   | PING
-  | PONG
 
 let int_of_typ = function
-  | HELLO -> 1
-  | HELLOACK -> 2
   | PING -> 3
-  | PONG -> 4
 
 let typ_of_int = function
-  | 1 -> HELLO
-  | 2 -> HELLOACK
   | 3 -> PING
-  | 4 -> PONG
   | _ -> raise (Invalid_argument "typ_of_int")
 
 let saddr_of_v6addr_port v6addr port =
@@ -48,6 +49,15 @@ let saddr_of_v6addr_port v6addr port =
 let v6addr_of_saddr = function
   | Unix.ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
   | _ -> raise (Invalid_argument "v6addr_of_saddr")
+
+let saddr_with_port saddr port =
+  match saddr with
+  | Unix.ADDR_INET (a, _) -> Unix.ADDR_INET (a, port)
+  | _ -> raise (Invalid_argument "saddr_with_port")
+
+let peer_ignored h p =
+  try SaddrMap.find p h.peers |> snd
+  with Not_found -> false
 
 let connect iface v6addr port mcast_reactor tcp_reactor =
   (* Join multicast group and bind socket to the group address. *)
@@ -75,18 +85,18 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
     }
   in
 
-  Lwt_log.ign_debug_f "Bound TCP port %d" tcp_in_port;
+  Lwt_log.ign_debug_f ~section "Bound TCP port %d" tcp_in_port;
 
   let idmsg = String.create 5 in
-  EndianString.BigEndian.set_int16 idmsg 1 (String.length idmsg - hdr_size);
-  EndianString.BigEndian.set_int16 idmsg 3 tcp_in_port;
+  EndianString.BigEndian.set_int16 idmsg 1 tcp_in_port;
+  EndianString.BigEndian.set_int16 idmsg 3 (String.length idmsg - hdr_size);
 
   (* ping group every ival seconds *)
   let ping ival =
     let rec inner () =
       (* Decrease TTL of all members *)
-      h.peers <- SaddrMap.fold (fun k v a ->
-          if v > 0 then SaddrMap.add k (pred v) a
+      h.peers <- SaddrMap.fold (fun k (ttl, ign) a ->
+          if ttl > 0 then SaddrMap.add k (pred ttl, ign) a
           else a
         ) h.peers SaddrMap.empty;
       idmsg.[0] <- int_of_typ PING |> Char.chr;
@@ -96,53 +106,58 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
   in
 
   (* Base reactor to react to protocol messages *)
-  let base_reactor dst_saddr buf =
-    (match typ_of_int (Char.code buf.[0]) with
-     | PING ->
-       Lwt_log.ign_info "Received PING.";
-       h.peers <- SaddrMap.add (dst_saddr |> v6addr_of_saddr,
-                                EndianString.BigEndian.get_uint16 buf 3) init_ttl h.peers;
-       idmsg.[0] <- int_of_typ PONG |> Char.chr;
-       Lwt_unix.sendto h.group_sock idmsg 0 (String.length idmsg) [] dst_saddr
-     | _ -> Lwt.return 0) (* We don't react to other messages. *)
-    >>= fun (_:int) ->
-    Lwt.return_unit
+  let base_reactor saddr buf =
+    match typ_of_int (Char.code buf.[0]) with
+    | PING ->
+      Lwt_log.ign_info ~section "Received PING.";
+      (try
+        let ttl, ign = SaddrMap.find saddr h.peers in
+        h.peers <- SaddrMap.add saddr (init_ttl, ign) h.peers
+      with Not_found ->
+        h.peers <- SaddrMap.add saddr (init_ttl, false) h.peers
+      );
+      Lwt.return_unit
   in
 
   let process h saddr buf =
-    if buf.[0] < '\100'
-    then (* control msg *)
+    let remote_port = EndianString.BigEndian.get_uint16 buf 1 in
+    let saddr = saddr_with_port saddr remote_port in
+    match buf.[0], peer_ignored h saddr with
+    | c,  _ when c < '\100' -> (* control msg *)
       (
-        Lwt_log.ign_debug "Receiving a control msg.";
+        Lwt_log.ign_debug ~section "Receiving a control msg.";
         Lwt.async (fun () -> base_reactor saddr buf)
       )
-    else (* user msg *)
+    | _, false ->
       (
-        Lwt_log.ign_debug "Receiving a user msg.";
+        Lwt_log.ign_debug ~section "Receiving a user msg, forwarding";
         Lwt.async (fun () -> mcast_reactor h saddr buf)
       )
+    | _ -> ()
   in
 
   (* react to incoming messages *)
   let react sock process =
-    let hdrbuf = String.create 3 in
+    let hdrbuf = String.create hdr_size in
     let rec inner () =
       (* Read header only *)
-      Lwt_unix.(recvfrom sock hdrbuf 0 3 [MSG_PEEK]) >>= fun (nbread, saddr) ->
-      Lwt_log.ign_debug "Incoming message: read header.";
-      if nbread <> 3 then
+      Lwt_unix.(recvfrom sock hdrbuf 0 hdr_size [MSG_PEEK]) >>= fun (nbread, saddr) ->
+      Lwt_log.ign_debug ~section "Incoming message: read header.";
+      if nbread <> hdr_size then
         (
-          Lwt_log.ign_debug_f "Corrupted header: len %d, expected 3" nbread;
+          Lwt_log.ign_debug_f ~section
+            "Corrupted header: len %d, expected %d" nbread hdr_size;
           inner ()
         )
       else
-        let msglen = EndianString.BigEndian.get_uint16 hdrbuf 1 in
-        let buf = String.create (msglen+3) in
-        Lwt_unix.recvfrom group_sock buf 0 (msglen+3) [] >>= fun (nbread, saddr) ->
-        if nbread <> (msglen+3)
+        let msglen = EndianString.BigEndian.get_uint16 hdrbuf 3 in
+        let buf = String.create (hdr_size + msglen) in
+        Lwt_unix.recvfrom group_sock buf 0 (hdr_size + msglen) [] >>= fun (nbread, saddr) ->
+        if nbread <> (hdr_size + msglen)
         then
           (
-            Lwt_log.ign_debug_f "Corrupted message: len %d, expected %d" nbread msglen;
+            Lwt_log.ign_debug_f ~section
+              "Corrupted message: len %d, expected %d" nbread (hdr_size + msglen);
             inner ();
           )
         else
@@ -170,9 +185,15 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
 let master h = fst (SaddrMap.min_binding h.peers)
 
 let sendto_master h buf off len flags =
-  let master_saddr = SaddrMap.min_binding h.peers |> fst
-                     |> fun (a,p) -> saddr_of_v6addr_port a p in
+  let master_saddr = SaddrMap.min_binding h.peers |> fst in
   Lwt_unix.sendto h.group_sock buf off len flags master_saddr
 
 let sendto_group h buf off len flags =
   Lwt_unix.sendto h.group_sock buf off len flags h.group_saddr
+
+let ignore_peer h p =
+  try
+    let ttl, _ = SaddrMap.find p h.peers in
+    h.peers <- SaddrMap.add p (ttl, true) h.peers
+  with Not_found ->
+    h.peers <- SaddrMap.add p (0, true) h.peers

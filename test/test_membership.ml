@@ -9,9 +9,9 @@ let main iface addr port =
   let h = connect iface addr port group_reactor tcp_reactor in
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
-    if h.peers <> SaddrMap.empty then
-      SaddrMap.iter (fun k v -> Printf.printf "[%s]:%d\n%!"
-                        (Ipaddr.V6.to_string (fst k)) (snd k)) h.peers;
+    SaddrMap.iter (fun k (ttl, ign) ->
+        Printf.printf "%s -> TTL=%d, ignored=%b\n%!" (Helpers.string_of_saddr k) ttl ign
+      ) h.peers;
     inner ()
   in inner ()
 
