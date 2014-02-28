@@ -150,14 +150,14 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
           inner ()
         )
       else
-        let msglen = EndianString.BigEndian.get_uint16 hdrbuf 3 in
-        let buf = String.create (hdr_size + msglen) in
-        Lwt_unix.recvfrom group_sock buf 0 (hdr_size + msglen) [] >>= fun (nbread, saddr) ->
-        if nbread <> (hdr_size + msglen)
+        let msglen = hdr_size + EndianString.BigEndian.get_uint16 hdrbuf 3 in
+        let buf = String.create msglen in
+        Lwt_unix.recvfrom group_sock buf 0 msglen [] >>= fun (nbread, saddr) ->
+        if nbread <> msglen
         then
           (
             Lwt_log.ign_debug_f ~section
-              "Corrupted message: len %d, expected %d" nbread (hdr_size + msglen);
+              "Corrupted message: len %d, expected %d" nbread msglen;
             inner ();
           )
         else
