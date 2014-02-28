@@ -1,9 +1,9 @@
 # OASIS_START
-# DO NOT EDIT (digest: 50e2da030e77eaf5160db4d7bce085fe)
+# DO NOT EDIT (digest: 3e8b0b7f40c3bf8c968a03dd08851ac9)
 version = "0.1"
 description =
 "Simple library to communicate (unreliably) within an IPv6 multicast network"
-requires = "irminsule llnet"
+requires = "irminsule llnet lwt.syntax"
 archive(byte) = "irmindistributed.cma"
 archive(byte, plugin) = "irmindistributed.cma"
 archive(native) = "irmindistributed.cmxa"

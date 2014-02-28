@@ -22,7 +22,7 @@ Library irmindistributed
   Install$: flag (irminsule)
   Path: irminsule
   Modules: IrminDistributed
-  BuildDepends: irminsule, llnet
+  BuildDepends: irminsule, llnet, lwt.syntax
   CompiledObject: best
 
 Executable test_membership
