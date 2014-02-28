@@ -25,8 +25,8 @@ let () =
       "--iface", Set_string iface, "<string> Interface to use (default: eth0)";
       "--addr", Set_string group_addr, "<string> IPv6 multicast group address to use (default: ff02::dead:beef)";
       "--port", Set_int group_port, "<int> Group port to use (default: 5555)";
-      "-v", Unit (fun () -> Lwt_log.(add_rule "*" Info)), " Be verbose";
-      "-vv", Unit (fun () -> Lwt_log.(add_rule "*" Debug)), " Be more verbose"
+      "-v", String (fun s -> Lwt_log.(add_rule s Info)), "<string> Log section to put in Info mode";
+      "-vv", String (fun s -> Lwt_log.(add_rule s Debug)), "<string> Log section to put in Debug mode";
     ]) in
   let anon_fun s = () in
   let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options>\nOptions are:" in
@@ -35,6 +35,7 @@ let () =
     let iface = !iface
     let mcast_addr = Ipaddr.V6.of_string_exn !group_addr
     let mcast_port = !group_port
+    let key_size = 20
   end in
   let module DAO = IrminDistributed.AO(IrminMemory.AO(IrminKey.SHA1))(Conf) in
   Lwt_main.run (main (module DAO: IrminStore.AO_BINARY))

@@ -1,7 +1,21 @@
+open Llnet
 open Core_kernel.Std
 
 let (>>=) = Lwt.(>>=)
 let (>|=) = Lwt.(>|=)
+
+let section = Lwt_log.Section.make "IrminDistributed"
+
+let sha1_to_hex ?nb_digit s =
+  let transform = Cryptokit.Hexa.encode () in
+  let hex = Cryptokit.transform_string transform s in
+  match nb_digit with
+  | None -> hex
+  | Some n -> String.sub hex 0 n
+
+let string_of_hex s =
+  let transform = Cryptokit.Hexa.decode () in
+  Cryptokit.transform_string transform s
 
 module Lwt_unix = struct
   include Lwt_unix
@@ -9,8 +23,9 @@ module Lwt_unix = struct
   let recv_into_exactly fd buf pos len flags =
     let rec inner pos len =
       if len > 0 then
-        recv fd buf pos len flags >>= fun nb_recv ->
-        inner (pos+nb_recv) (len-nb_recv)
+        recv fd buf pos len flags >>= function
+        | 0 -> Lwt.fail End_of_file
+        | nb_recv -> inner (pos+nb_recv) (len-nb_recv)
       else Lwt.return_unit
     in inner pos len
 
@@ -21,29 +36,39 @@ module Lwt_unix = struct
         inner (pos+nb_sent) (len-nb_sent)
       else Lwt.return_unit
     in inner pos len
+
+  let really_sendto fd buf pos len flags saddr =
+    let rec inner () =
+      sendto fd buf pos len flags saddr >>= fun nb_sent ->
+      if nb_sent = len then Lwt.return_unit
+      else inner ()
+    in inner ()
 end
 
 type protocol =
   | KEYREQ
-  | KEYACK
-  | DUMPREQ
-  | DUMPACK
   | NEWKEY
+  | HELLO
+  | HELLOACK
 
 let int_of_protocol = function
   | KEYREQ -> 100
-  | KEYACK -> 101
-  | DUMPREQ -> 102
-  | DUMPACK -> 103
   | NEWKEY -> 104
+  | HELLO -> 105
+  | HELLOACK -> 106
 
 let protocol_of_int = function
   | 100 -> KEYREQ
-  | 101 -> KEYACK
-  | 102 -> DUMPREQ
-  | 103 -> DUMPACK
   | 104 -> NEWKEY
+  | 105 -> HELLO
+  | 106 -> HELLOACK
   | _ -> raise (Invalid_argument "protocol_of_int")
+
+let string_of_protocol = function
+  | KEYREQ -> "KEYREQ"
+  | NEWKEY -> "NEWKEY"
+  | HELLO -> "HELLO"
+  | HELLOACK -> "HELLOACK"
 
 let saddr_with_port saddr port =
   let open Unix in
@@ -54,163 +79,264 @@ let saddr_with_port saddr port =
 let v6addr_of_saddr saddr =
   let open Unix in
   match saddr with
-  | ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
+  | ADDR_INET (a, p) -> Ipaddr_unix.V6.of_inet_addr_exn a, p
   | _ -> raise (Invalid_argument "v6addr_of_saddr")
+
 
 module type CONFIG = sig
   val iface : string
   val mcast_addr : Ipaddr.V6.t
   val mcast_port : int
+  val key_size : int
 end
 
 module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
+  open C
 
   type key = AO.key
   type value = AO.value
   type t = AO.t * Llnet.t
 
+  (* Broadcast a key on the multicast sockaddr *)
+  let new_key ?(msgbuf=String.create 512) c k v =
+    let vlen = Bigstring.length v in
+    let klen = String.length k in
+    let msglen = hdr_size + klen + vlen in
+    msgbuf.[0] <- int_of_protocol NEWKEY |> Char.of_int_exn;
+    EndianString.BigEndian.set_int16 msgbuf 1 c.tcp_in_port;
+    EndianString.BigEndian.set_int16 msgbuf 3 klen;
+    String.blit k 0 msgbuf hdr_size klen;
+    (if msglen <= 512 then (* send value as well *)
+      (
+        EndianString.BigEndian.set_int16 msgbuf 3 (klen + vlen);
+        Bigstring.To_string.blit ~src:v ~src_pos:0 ~dst:msgbuf
+          ~dst_pos:(hdr_size + klen) ~len:vlen;
+        Lwt_unix.really_sendto c.group_sock msgbuf 0 msglen [] c.group_saddr
+      )
+    else
+      Lwt_unix.really_sendto c.group_sock msgbuf 0 (hdr_size + klen) [] c.group_saddr)
+    >>= fun () ->
+    Lwt_log.debug_f ~section "-> NEWKEY %s" (Helpers.string_of_saddr c.group_saddr)
+
+  (* Send a complete Bigstring value on a TCP socket *)
+  let send_value ?(buf=String.create 4096) fd v flags =
+    let buflen = String.length buf in
+    let vlen = Bigstring.length v in
+    let rec inner pos len =
+      if len > buflen then
+        (
+          Bigstring.To_string.blit ~src:v ~src_pos:pos ~dst:buf ~dst_pos:0 ~len:buflen;
+          Lwt_unix.send_from_exactly fd buf 0 buflen flags >>= fun () ->
+          inner (pos+buflen) (len-buflen)
+        )
+      else
+        (
+          Bigstring.To_string.blit ~src:v ~src_pos:pos ~dst:buf ~dst_pos:0 ~len;
+          Lwt_unix.send_from_exactly fd buf 0 len flags
+        )
+    in inner 0 vlen
+
+  (* Recv a complete Bigstring value on a TCP socket *)
+  let recv_value ?(buf=String.create 4096) fd vlen flags =
+    let buflen = String.length buf in
+    let v = Bigstring.create vlen in
+    let rec inner pos len =
+      if len > buflen then
+        (
+          Lwt_unix.recv_into_exactly fd buf 0 buflen flags >>= fun () ->
+          Bigstring.From_string.blit ~src:buf ~src_pos:0 ~dst:v ~dst_pos:pos ~len:buflen;
+          inner (pos+buflen) (len-buflen)
+        )
+      else
+        (
+          Lwt_unix.recv_into_exactly fd buf 0 len flags >>= fun () ->
+          Bigstring.From_string.blit ~src:buf ~src_pos:0 ~dst:v ~dst_pos:pos ~len;
+          Lwt.return_unit
+        )
+    in
+    inner 0 vlen >|= fun () -> v
+
   let create () =
     (* Create the underlying store *)
     AO.create () >>= fun store ->
 
+    (* [msg] is only used in this function, hence can be trashed. *)
     let group_reactor c saddr msg =
+      let payload_len = EndianString.BigEndian.get_uint16 msg 3 in
       match msg.[0] |> Char.to_int |> protocol_of_int with
 
-      | NEWKEY -> (* KEYREQ it *)
-        let remote_port = EndianString.BigEndian.get_uint16 msg 3 in
-        let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
-        Lwt.try_bind
-          (fun () -> Lwt.wrap (fun () ->
-               Sockopt.connect6 ~iface:C.iface s (v6addr_of_saddr saddr) remote_port))
-          (fun () ->
-             let s = Lwt_unix.of_unix_file_descr s in
-             msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
-             EndianString.BigEndian.set_int16 msg 3 c.Llnet.tcp_in_port;
-             Lwt_unix.send_from_exactly s msg 0 (String.length msg) [] >>= fun () ->
-             Lwt_unix.close s
+      | NEWKEY -> (* maybe KEYREQ it *)
+        let remote_k = String.sub msg hdr_size key_size in
+        if payload_len > C.key_size
+        then (* value is embedded *)
+          (
+            Bigstring.From_string.sub msg
+              ~pos:(hdr_size + key_size)
+              ~len:(payload_len - key_size)
+            |>
+            AO.add store >>= fun k ->
+            assert (k = remote_k);
+            Lwt_log.debug_f ~section "<- NEWKEY %s (VALUE: %s)"
+              (Helpers.string_of_saddr saddr)
+              (sha1_to_hex ~nb_digit:7 k)
           )
-          (fun exn ->
-             Unix.close s;
-             Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
-              Unix.(match saddr with
-                  | ADDR_INET(a, _) -> string_of_inet_addr a
-                  | _ -> assert false) remote_port)
+        else (* KEYREQ it *)
+          (
+            let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
+            try_lwt
+              let addr, port = v6addr_of_saddr saddr in
+              Sockopt.connect6 ~iface:C.iface s addr port;
+              let s = Lwt_unix.of_unix_file_descr s in
+              msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
+              Lwt_unix.send_from_exactly s msg 0 (hdr_size + key_size) [] >>= fun () ->
+              Lwt_unix.recv_into_exactly s msg 0 4 [] >>= fun () ->
+              let vlen = EndianString.BigEndian.get_int32 msg 0 |> Int32.to_int_exn in
+              let v = String.create vlen in
+              Lwt_unix.recv_into_exactly s v 0 vlen [] >>= fun () ->
+              Bigstring.From_string.sub v 0 vlen |>
+              AO.add store >>= fun k ->
+              Lwt_unix.close s >>= fun () ->
+              Lwt_log.debug_f ~section "Successfully KEYREQed NEWKEY (%s) from %s"
+                (sha1_to_hex ~nb_digit:7 k) (Helpers.string_of_saddr saddr)
+            with exn ->
+              Lwt_log.warning_f ~section ~exn "Problem KEYREQing %s from %s"
+                (sha1_to_hex ~nb_digit:7 remote_k) (Helpers.string_of_saddr saddr)
+            finally
+              Unix.close s; Lwt.return_unit
+          )
 
-      | KEYREQ -> (* Send our keys to peer *)
-        let remote_port = EndianString.BigEndian.get_uint16 msg 3 in
-        let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
-        Lwt.try_bind
-          (fun () -> Lwt.wrap (fun () ->
-               Sockopt.connect6 ~iface:C.iface s (v6addr_of_saddr saddr) remote_port))
-          (fun () ->
-             let s = Lwt_unix.of_unix_file_descr s in
-             AO.contents store >>= fun cts ->
-             let all_keys = List.map cts fst in
-             let msg_size = List.fold_left all_keys ~f:(fun a k -> a + 2 + String.length k) ~init:0 in
-             msg.[0] <- int_of_protocol KEYACK |> Char.of_int_exn;
-             EndianString.BigEndian.set_int16 msg 1 msg_size;
-             Lwt_unix.send_from_exactly s msg 0 3 [] >>= fun () ->
-             Lwt_list.iter_s (fun k ->
-                 let klen = String.length k in
-                 EndianString.BigEndian.set_int16 msg 1 klen;
-                 Lwt_unix.send_from_exactly s msg 1 2 [] >>= fun () ->
-                 Lwt_unix.send_from_exactly s k 0 klen []
-               ) all_keys >>= fun () ->
-             Lwt_unix.close s
+      | HELLO -> (* Send our keys to peer *)
+        let remote_key_size = EndianString.BigEndian.get_uint16 msg hdr_size in
+        if key_size <> remote_key_size then
+          Lwt_log.warning_f ~section
+            "<- HELLO %s (FAIL: incompatible key size %d, ignoring peer)"
+            (Helpers.string_of_saddr saddr) remote_key_size >|= fun () ->
+          ignore_peer c saddr
+        else
+          (
+            Lwt_log.debug_f ~section "<- HELLO %s (OK: key size matches)"
+              (Helpers.string_of_saddr saddr) >>= fun () ->
+            let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
+            let k_sent = ref 0 in
+            let v_sent = ref 0 in
+            try_lwt
+              let addr, port = v6addr_of_saddr saddr in
+              Sockopt.connect6 ~iface:C.iface s addr port;
+              let s = Lwt_unix.of_unix_file_descr s in
+              AO.contents store >>= fun kvs ->
+              msg.[0] <- int_of_protocol HELLOACK |> Char.of_int_exn;
+              Lwt_unix.send_from_exactly s msg 0 hdr_size [] >>= fun () ->
+              Lwt_list.iter_s (fun (k,v) ->
+                  Lwt_unix.send_from_exactly s k 0 key_size [] >>= fun () ->
+                  incr k_sent;
+                  Lwt_unix.recv_into_exactly s msg 0 1 [] >>= fun () ->
+                  match msg.[0] with
+                  | '\000' -> Lwt.return_unit (* Remote is not interested by this key *)
+                  | '\001' -> (* Remote is interested *)
+                    let vlen = Bigstring.length v in
+                    EndianString.BigEndian.set_int32 msg 0 (Int32.of_int_exn vlen);
+                    Lwt_unix.send_from_exactly s msg 0 4 [] >>= fun () ->
+                    send_value s v [] >|= fun () -> incr v_sent
+                  | _ -> Lwt.fail (Failure "HELLOACK implementation error.")
+                ) kvs
+            with exn ->
+              Lwt_log.warning_f ~section ~exn "-> HELLOACK: Error sending values to %s"
+                (Helpers.string_of_saddr saddr)
+            finally
+              Lwt_log.debug_f ~section "-> HELLOACK: Sent (%d, %d) kvs to %s" !k_sent !v_sent
+                (Helpers.string_of_saddr saddr) >|= fun () ->
+              Unix.close s
           )
-          (fun exn ->
-             Unix.close s;
-             Lwt_log.warning_f ~exn "Cannot connect to [%s]:%d"
-              Unix.(match saddr with
-                  | ADDR_INET(a, _) -> string_of_inet_addr a
-                  | _ -> assert false) remote_port)
 
       | _ -> Lwt.return_unit (* Ignore all other message types sent to the group socket *)
     in
+
     let tcp_reactor fd saddr =
-      (* We create our own buffers here, they will not be used by
-         anybody else *)
       let tcpbuf = String.create 4096 in
-      let tcpmsg = Buffer.create 4096 in
-      Lwt_unix.recv fd tcpbuf 0 3 [] >>= fun nbread ->
-      if nbread <> 3 then Lwt.return_unit (* Corrupted message *)
+      Lwt_unix.recv fd tcpbuf 0 hdr_size [] >>= fun nb_read ->
+      if nb_read <> hdr_size then
+        Lwt_log.debug_f ~section "TCP reactor: Corrupted message from %s"
+          (Helpers.string_of_saddr saddr) >>= fun () ->
+        Lwt_unix.close fd (* Corrupted message *)
       else
-        let msgtyp = tcpbuf.[0] |> Char.to_int |> protocol_of_int in
-        let payload_len = EndianString.BigEndian.get_uint16 tcpbuf 1 in
-        let rec read_all len =
-          if len < 1
-          then Lwt.return_unit
-          else
-            (
-              Lwt_unix.recv fd tcpbuf 0 4096 [] >>= fun nb_read ->
-              Buffer.add_substring tcpmsg tcpbuf 0 nb_read;
-              read_all (len-nb_read)
-            )
-        in
-        read_all payload_len >>= fun () ->
+        match tcpbuf.[0] |> Char.to_int |> protocol_of_int with
 
-        (* The message is now in tcpmsg. Variants have to extract it. *)
-
-        match msgtyp with
-        | KEYACK -> (* DUMPREQ keys we don't have *)
-
-          (* Extract the keys into a list *)
-          let msg = Buffer.contents tcpmsg in
-
-          let list_of_keys buf off len =
-            let rec inner acc off len =
-            if len > 0 then
-              let klen = EndianString.BigEndian.get_uint16 msg off in
-              inner ((String.sub msg (off+2) klen)::acc) (off+2+klen) (len-2-klen)
-            else acc
-            in inner [] off len
-          in
-          let recv_keys = list_of_keys msg 0 payload_len in
-
-          (* Iterate on keys and ask the ones we don't have *)
-          Lwt_list.iter_s (fun k ->
+        | KEYREQ ->
+          let rec inner n =
+            try_lwt
+              Lwt_unix.recv_into_exactly fd tcpbuf 0 key_size [] >>= fun () ->
+              let k = String.sub tcpbuf 0 key_size in
               AO.mem store k >>= function
-              | true -> Lwt.return_unit
-              | false ->
-                let klen = String.length k in
-                tcpbuf.[0] <- int_of_protocol DUMPREQ |> Char.of_int_exn;
-                EndianString.BigEndian.set_int16 tcpbuf 1 klen;
-                String.blit k 0 tcpbuf 3 klen;
-                Lwt_unix.send_from_exactly fd tcpbuf 0 (klen+3) [] >>= fun () ->
-                Lwt_unix.recv_into_exactly fd tcpbuf 0 3 [] >>= fun () ->
-                let vlen = EndianString.BigEndian.get_uint16 tcpbuf 1 in
-                Lwt_unix.recv_into_exactly fd tcpbuf 0 vlen [] >>= fun () ->
-                let value = Bigstring.create vlen in
-                Bigstring.From_string.blit ~src:tcpbuf ~src_pos:0 ~dst:value ~dst_pos:0 ~len:vlen;
-                AO.add store value >>= fun (_:string) -> Lwt.return_unit)
-            recv_keys;
+              | false -> (* Asked key not in our store, send -1 *)
+                EndianString.BigEndian.set_int32 tcpbuf 0 (-1l);
+                Lwt_unix.send_from_exactly fd tcpbuf 0 4 [] >>= fun () -> inner (succ n)
+              | true -> (* Asked key in our store, send it *)
+                AO.read_exn store k >>= fun v ->
+                let vlen = Bigstring.length v in
+                EndianString.BigEndian.set_int32 tcpbuf 0 (Int32.of_int_exn vlen);
+                send_value ~buf:tcpbuf fd v [] >>= fun () -> inner (succ n)
+
+            with exn ->
+              Lwt_log.debug_f ~section ~exn "KEYREQ to %s terminated, %d key sent"
+                (Helpers.string_of_saddr saddr) n >>= fun () ->
+              Lwt_unix.close fd
+          in inner 0
+
+        | HELLOACK ->
+          let rec inner kr vr =
+            try_lwt
+              Lwt_unix.recv_into_exactly fd tcpbuf 0 key_size [] >>= fun () ->
+              let k = String.sub tcpbuf 0 key_size in
+              AO.mem store k >>= function
+              | false -> (* We don't have it, asking for it *)
+                tcpbuf.[0] <- '\001';
+                Lwt_log.debug_f ~section "<- HELLOACK: Got %s, asking for it"
+                  (sha1_to_hex ~nb_digit:7 k) >>= fun () ->
+                Lwt_unix.send_from_exactly fd tcpbuf 0 1 [] >>= fun () ->
+                Lwt_unix.recv_into_exactly fd tcpbuf 0 4 [] >>= fun () ->
+                let vlen = EndianString.BigEndian.get_int32 tcpbuf 0 |> Int32.to_int_exn in
+                recv_value ~buf:tcpbuf fd vlen [] >>= fun v ->
+                AO.add store v >>= fun (_:AO.key) -> inner (succ kr) (succ vr)
+              | true -> (* We already have the value *)
+                tcpbuf.[0] <- '\000';
+                Lwt_log.debug_f ~section "<- HELLOACK: Got %s, I already have it"
+                  (sha1_to_hex ~nb_digit:7 k) >>= fun () ->
+                Lwt_unix.send_from_exactly fd tcpbuf 0 1 [] >>= fun () ->
+                inner (succ kr) vr
+            with exn ->
+              Lwt_log.debug_f ~section ~exn "<- HELLOACK from %s terminated, got (%d, %d) kvs"
+                (Helpers.string_of_saddr saddr) kr vr >>= fun () ->
+              Lwt_unix.close fd
+          in inner 0 0
 
         | _ -> Lwt.return_unit (* Ignore all other messages *)
 
     in
-    let c = Llnet.connect C.iface C.mcast_addr C.mcast_port group_reactor tcp_reactor in
-    let send_keyreq c =
-      let buf = String.create 5 in
-      buf.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
-      EndianString.BigEndian.set_int16 buf 1 2;
-      EndianString.BigEndian.set_int16 buf 3 c.Llnet.tcp_in_port;
-      Lwt_unix.sendto c.Llnet.group_sock buf 0 5 [] c.Llnet.group_saddr
+    let c = connect iface mcast_addr mcast_port group_reactor tcp_reactor in
+
+    (* Say hello and give our keys *)
+    let say_hello c =
+      let msgbuf = String.create 512 in
+      msgbuf.[0] <- int_of_protocol HELLO |> Char.of_int_exn;
+      EndianString.BigEndian.set_int16 msgbuf 1 c.tcp_in_port;
+      EndianString.BigEndian.set_int16 msgbuf 3 2;
+      EndianString.BigEndian.set_int16 msgbuf 5 key_size;
+      Lwt_unix.really_sendto c.group_sock msgbuf 0 (hdr_size + 2) [] c.group_saddr >>= fun () ->
+      Lwt_log.debug_f ~section "-> HELLO %s" (Helpers.string_of_saddr c.group_saddr) >>= fun () ->
+      AO.contents store >>= fun kvs ->
+      Lwt_list.iter_s (fun (k, v) -> new_key ~msgbuf c k v) kvs
     in
-    send_keyreq c >|= fun (_:int) ->
+    say_hello c >|= fun () ->
     (store, c)
+
 
   (* [add] is overloaded by a function that broadcast new keys on the
      network. Interested nodes will KEYREQ it. *)
-  let msgbuf = String.create 512
   let add (store, c) v =
     AO.add store v >>= fun k ->
-    let klen = String.length k in
-    let msg_size = Llnet.hdr_size + 2 + klen in
-    msgbuf.[0] <- int_of_protocol NEWKEY |> Char.of_int_exn;
-    EndianString.BigEndian.set_int16 msgbuf 1 (2 + klen);
-    EndianString.BigEndian.set_int16 msgbuf 3 c.Llnet.tcp_in_port;
-    String.blit k 0 msgbuf 5 klen;
-    Lwt_unix.sendto c.Llnet.group_sock msgbuf 0 msg_size [] c.Llnet.group_saddr >>= fun (_:int) ->
+    Lwt_log.info_f ~section "New blob: %s" (sha1_to_hex ~nb_digit:7 k)
+    >>= fun () ->
+    new_key c k v >>= fun () ->
     Lwt.return k
 
   let read (store, c) k = AO.read store k
