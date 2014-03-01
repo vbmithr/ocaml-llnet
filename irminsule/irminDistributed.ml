@@ -156,6 +156,9 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
 
       | NEWKEY -> (* maybe KEYREQ it *)
         let remote_k = String.sub msg hdr_size key_size in
+        Lwt_log.debug_f ~section "<- NEWKEY %s %s"
+          (sha1_to_hex ~nb_digit:7 remote_k)
+          (Helpers.string_of_saddr saddr) >>= fun () ->
         AO.mem store remote_k >>= (function
             | true -> Lwt.return_unit
             | false ->
@@ -167,10 +170,7 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
                     ~len:(payload_len - key_size)
                   |>
                   AO.add store >>= fun k ->
-                  assert (k = remote_k);
-                  Lwt_log.debug_f ~section "<- NEWKEY %s %s"
-                    (sha1_to_hex ~nb_digit:7 k)
-                    (Helpers.string_of_saddr saddr)
+                  assert_lwt (k = remote_k)
                 )
               else (* KEYREQ it *)
                 (
@@ -180,6 +180,7 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
                     Sockopt.connect6 ~iface:C.iface s addr port;
                     let s = Lwt_unix.of_unix_file_descr s in
                     msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
+                    EndianString.BigEndian.set_int16 msg 1 c.tcp_in_port;
                     Lwt_unix.send_from_exactly s msg 0 (hdr_size + key_size) [] >>= fun () ->
                     Lwt_unix.recv_into_exactly s msg 0 4 [] >>= fun () ->
                     let vlen = EndianString.BigEndian.get_int32 msg 0 |> Int32.to_int_exn in
@@ -189,10 +190,10 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
                       let v = Bigstring.create vlen in
                       Lwt_unix.recv_into_bigstring_exactly ~buf:msg s v 0 vlen [] >>= fun () ->
                       AO.add store v >>= fun k ->
-                      Lwt_log.debug_f ~section "<- KEYREQ %s from %s"
+                      Lwt_log.debug_f ~section "<- KEYACK %s from %s"
                         (sha1_to_hex ~nb_digit:7 k) (Helpers.string_of_saddr saddr)
                   with exn ->
-                    Lwt_log.warning_f ~section ~exn "<- KEYREQ %s from %s"
+                    Lwt_log.warning_f ~section ~exn "<- KEYACK %s from %s"
                       (sha1_to_hex ~nb_digit:7 remote_k) (Helpers.string_of_saddr saddr)
                   finally
                     Unix.close s; Lwt.return_unit
@@ -253,6 +254,8 @@ module AO (AO : IrminStore.AO_BINARY) (C : CONFIG) = struct
           (Helpers.string_of_saddr saddr) >>= fun () ->
         Lwt_unix.close fd (* Corrupted message *)
       else
+        let remote_port = EndianString.BigEndian.get_uint16 tcpbuf 1 in
+        let saddr = saddr_with_port saddr remote_port in
         match tcpbuf.[0] |> Char.to_int |> protocol_of_int with
 
         | KEYREQ ->
