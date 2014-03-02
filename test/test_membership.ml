@@ -5,12 +5,13 @@ let (>>=) = Lwt.(>>=)
 
 let main iface addr port =
   let group_reactor _ _ _ = Lwt.return_unit in
-  let tcp_reactor _ _ = Lwt.return_unit in
-  let h = connect iface addr port group_reactor tcp_reactor in
+  let tcp_reactor _ _ _ = Lwt.return_unit in
+  connect iface addr port group_reactor tcp_reactor >>= fun h ->
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
+    Printf.printf "I am peer number %d and my group is:\n%!" (order h);
     SaddrMap.iter (fun k (ttl, ign) ->
-        Printf.printf "%s -> TTL=%d, ignored=%b\n%!" (Helpers.string_of_saddr k) ttl ign
+        Printf.printf "  %s -> TTL=%d, ignored=%b\n%!" (Helpers.string_of_saddr k) ttl ign
       ) h.peers;
     inner ()
   in inner ()

@@ -16,12 +16,33 @@ module Helpers = struct
     match saddr with
     | ADDR_INET (a, p) -> Printf.sprintf "[%s]:%d" (string_of_inet_addr a) p
     | ADDR_UNIX p -> Printf.sprintf "unix://%s" p
+
+  let saddr_of_v6addr_port v6addr port =
+    Unix.ADDR_INET (Ipaddr_unix.V6.to_inet_addr v6addr, port)
+
+  let v6addr_of_saddr = function
+    | Unix.ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
+    | _ -> raise (Invalid_argument "v6addr_of_saddr")
+
+  let saddr_with_port saddr port =
+    match saddr with
+    | Unix.ADDR_INET (a, _) -> Unix.ADDR_INET (a, port)
+    | _ -> raise (Invalid_argument "saddr_with_port")
+
+  let port_of_saddr = function
+    | Unix.ADDR_INET (_, p) -> p
+    | _ -> raise (Invalid_argument "port_of_saddr")
 end
 
-module SaddrMap = Map.Make(struct
-    type t = Unix.sockaddr
-    let compare = Pervasives.compare
-  end)
+open Helpers
+
+module OrderedSockaddr = struct
+  type t = Unix.sockaddr
+  let compare = Pervasives.compare
+end
+
+module SaddrMap = Map.Make(OrderedSockaddr)
+module SaddrSet = Set.Make(OrderedSockaddr)
 
 type id = string
 
@@ -29,7 +50,7 @@ type t = {
   group_sock: Lwt_unix.file_descr;
   group_saddr: Unix.sockaddr;
   tcp_in_sock: Lwt_unix.file_descr;
-  tcp_in_port: int;
+  tcp_in_saddr: Unix.sockaddr;
   mutable peers: (int * bool) SaddrMap.t;
 }
 
@@ -43,23 +64,12 @@ let typ_of_int = function
   | 3 -> PING
   | _ -> raise (Invalid_argument "typ_of_int")
 
-let saddr_of_v6addr_port v6addr port =
-  Unix.ADDR_INET (Ipaddr_unix.V6.to_inet_addr v6addr, port)
-
-let v6addr_of_saddr = function
-  | Unix.ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
-  | _ -> raise (Invalid_argument "v6addr_of_saddr")
-
-let saddr_with_port saddr port =
-  match saddr with
-  | Unix.ADDR_INET (a, _) -> Unix.ADDR_INET (a, port)
-  | _ -> raise (Invalid_argument "saddr_with_port")
-
 let peer_ignored h p =
   try SaddrMap.find p h.peers |> snd
   with Not_found -> false
 
-let connect iface v6addr port mcast_reactor tcp_reactor =
+let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
+    iface v6addr port mcast_reactor tcp_reactor =
   (* Join multicast group and bind socket to the group address. *)
   let group_sock = Unix.(socket PF_INET6 SOCK_DGRAM 0) in
   let tcp_in_sock = Unix.(socket PF_INET6 SOCK_STREAM 0) in
@@ -71,29 +81,41 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
       Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified 0;
       Unix.listen tcp_in_sock 5;
     ) ();
-  let tcp_in_port = Unix.(match getsockname tcp_in_sock with
-      | ADDR_INET (a, p) -> p
-      | _ -> raise (Invalid_argument "my_port")) in
+  let my_ipaddr =
+    let open Tuntap in
+    List.fold_left
+      (fun a { name; ipaddr } -> match name, ipaddr with
+         | name, AF_INET6 (addr, _) when Ipaddr.(V6.scope addr = Link) && name = iface ->
+           Some (Ipaddr_unix.V6.to_inet_addr addr)
+         | _ -> a
+      ) None (Tuntap.getifaddrs ()) in
+  let tcp_in_saddr = Unix.(match my_ipaddr, (getsockname tcp_in_sock) with
+      | Some ip, ADDR_INET (a, p) -> ADDR_INET (ip, p)
+      | _ -> raise (Invalid_argument "tcp_in_saddr")) in
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
   let h =
     { group_sock;
       group_saddr = saddr_of_v6addr_port v6addr port;
       tcp_in_sock;
-      tcp_in_port;
-      peers = SaddrMap.empty
+      tcp_in_saddr;
+      peers = SaddrMap.singleton tcp_in_saddr (init_ttl, false)
     }
   in
 
-  Lwt_log.ign_debug_f ~section "Bound TCP port %d" tcp_in_port;
+  Lwt_log.ign_debug_f ~section "Bound TCP port %d" (port_of_saddr tcp_in_saddr);
 
   let idmsg = String.create 5 in
-  EndianString.BigEndian.set_int16 idmsg 1 tcp_in_port;
+  EndianString.BigEndian.set_int16 idmsg 1 (port_of_saddr tcp_in_saddr);
   EndianString.BigEndian.set_int16 idmsg 3 (String.length idmsg - hdr_size);
+
+  let connect_wait, connect_wakeup = Lwt.wait () in
 
   (* ping group every ival seconds *)
   let ping ival =
-    let rec inner () =
+    let rec inner n =
+      (* connect can now return! *)
+      if n = 2 then Lwt.wakeup connect_wakeup ();
       (* Decrease TTL of all members *)
       h.peers <- SaddrMap.fold (fun k (ttl, ign) a ->
           if ttl > 0 then SaddrMap.add k (pred ttl, ign) a
@@ -101,8 +123,8 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
         ) h.peers SaddrMap.empty;
       idmsg.[0] <- int_of_typ PING |> Char.chr;
       Lwt_unix.sendto group_sock idmsg 0 (String.length idmsg) [] h.group_saddr >>= fun (_:int) ->
-      Lwt_unix.sleep ival >>= fun () -> inner ()
-    in inner ()
+      Lwt_unix.sleep ival >>= fun () -> inner (succ n)
+    in inner 0
   in
 
   (* Base reactor to react to protocol messages *)
@@ -131,7 +153,7 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
     | _, false ->
       (
         Lwt_log.ign_debug ~section "Receiving a user msg, forwarding";
-        Lwt.async (fun () -> mcast_reactor h saddr buf)
+        Lwt.async (fun () -> udp_wait >>= fun () -> mcast_reactor h saddr buf)
       )
     | _ -> ()
   in
@@ -142,7 +164,6 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
     let rec inner () =
       (* Read header only *)
       Lwt_unix.(recvfrom sock hdrbuf 0 hdr_size [MSG_PEEK]) >>= fun (nbread, saddr) ->
-      Lwt_log.ign_debug ~section "Incoming message: read header.";
       if nbread <> hdr_size then
         (
           Lwt_log.ign_debug_f ~section
@@ -171,25 +192,16 @@ let connect iface v6addr port mcast_reactor tcp_reactor =
   let accept_forever fd =
     let rec inner () =
       Lwt_unix.accept fd >>= fun (fd, dst_saddr) ->
-      Lwt.async (fun () -> tcp_reactor fd dst_saddr);
+      Lwt.async (fun () -> tcp_reactor h fd dst_saddr);
       inner ()
     in inner ()
 
   in
   (* Launch threads and return handler *)
   Lwt.async (fun () -> react group_sock process);
-  Lwt.async (fun () -> accept_forever tcp_in_sock);
-  Lwt.async (fun () -> ping 1.);
-  h
-
-let master h = fst (SaddrMap.min_binding h.peers)
-
-let sendto_master h buf off len flags =
-  let master_saddr = SaddrMap.min_binding h.peers |> fst in
-  Lwt_unix.sendto h.group_sock buf off len flags master_saddr
-
-let sendto_group h buf off len flags =
-  Lwt_unix.sendto h.group_sock buf off len flags h.group_saddr
+  Lwt.async (fun () -> tcp_wait >>= fun () -> accept_forever tcp_in_sock);
+  Lwt.async (fun () -> ping ival);
+  connect_wait >|= fun () -> h
 
 let ignore_peer h p =
   try
@@ -197,3 +209,20 @@ let ignore_peer h p =
     h.peers <- SaddrMap.add p (ttl, true) h.peers
   with Not_found ->
     h.peers <- SaddrMap.add p (0, true) h.peers
+
+let order h =
+  let indexed_list =
+    List.mapi
+      (fun i (k,_) -> k, i)
+      (SaddrMap.bindings h.peers)
+  in
+  List.find (fun (k, _) -> h.tcp_in_saddr = k) indexed_list |> snd
+
+let first_neighbour h =
+  SaddrMap.fold
+    (fun saddr (ttl, ignored) a ->
+       if ttl > 0 && not ignored && saddr <> h.tcp_in_saddr
+       then Some saddr
+       else a
+    )
+    h.peers None
