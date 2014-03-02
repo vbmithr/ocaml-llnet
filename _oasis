@@ -14,7 +14,7 @@ Flag irminsule
 Library llnet
   Path: lib
   Modules: Llnet
-  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit
+  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit, tuntap
   CompiledObject: best
 
 Library irmindistributed
@@ -32,10 +32,18 @@ Executable test_membership
   CompiledObject: best
   Install: false
 
-Executable test_store
+Executable test_ao
   Build$: flag(irminsule)
   Install: false
   Path: irminsule_test
-  MainIs: test_store.ml
+  MainIs: test_ao.ml
+  CompiledObject: best
+  BuildDepends: irminsule.backend, irmindistributed
+
+Executable test_rw
+  Build$: flag(irminsule)
+  Install: false
+  Path: irminsule_test
+  MainIs: test_rw.ml
   CompiledObject: best
   BuildDepends: irminsule.backend, irmindistributed
