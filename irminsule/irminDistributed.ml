@@ -369,14 +369,17 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
   let section = Lwt_log.Section.make "RW"
 
   let create () =
-    let udp_wait, udp_wakeup = Lwt.wait () in
-    let tcp_wait, tcp_wakeup = Lwt.wait () in
     RW.create () >>= fun store ->
+    RW.create () >>= fun tmp_store ->
+    let hello_done = ref false in
     let group_reactor c saddr msg =
       if saddr = c.tcp_in_saddr
       then Lwt.return_unit (* Ignoring own messages *)
       else
         let payload_len = EndianString.BigEndian.get_uint16 msg 3 in
+        (* Storing updates in temporary store if HELLO is not
+           finished. *)
+        let store = if !hello_done then store else tmp_store in
         match msg.[0] |> Char.to_int |> protocol_of_int with
         | UPDATE ->
           let klen = payload_len - key_size in
@@ -478,14 +481,18 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
             import_kvs (succ n)
             with exn ->
               Lwt_log.debug_f ~section ~exn "<- HELLOACK %s terminated, %d keys recv"
-                (Helpers.string_of_saddr saddr) n
+                (Helpers.string_of_saddr saddr) n >>= fun () ->
+              (* Replaying tmp_store on top of store. *)
+              RW.contents tmp_store >>= fun cts ->
+              Lwt_list.iter_s (fun (k,v) -> RW.update store k v) cts
+              >|= fun () -> hello_done := true
           in import_kvs 0
         with exn ->
           Lwt_log.debug_f ~section ~exn "<> HELLO %s FAILED" (Helpers.string_of_saddr saddr)
         finally
           Unix.close s |> Lwt.return
     in
-    connect ~tcp_wait ~udp_wait iface mcast_addr mcast_port group_reactor tcp_reactor >>= fun c ->
+    connect iface mcast_addr mcast_port group_reactor tcp_reactor >>= fun c ->
     say_hello c >|= fun () ->
     (store, c)
 
