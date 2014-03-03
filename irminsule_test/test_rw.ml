@@ -19,14 +19,15 @@ let main drw vsize =
   Lwt_main.at_exit (fun () ->
       contents store >>= fun kvs ->
       let kvs = List.sort compare kvs in
-      Lwt_io.printf "\nExiting with %d kvs in store\n" (List.length kvs) >>= fun () ->
-      Lwt_list.iter_s (fun (k, v) -> Lwt_io.printf "%Ld -> %s\n"
-                          (EndianString.BigEndian.get_int64 k 0)
-                          (sha1_to_hex ~nb_digit:7 k)) kvs
+      Lwt_io.printf "\nExiting with %d kvs in store\n" (List.length kvs)
+      (* >>= fun () -> *)
+      (* Lwt_list.iter_s (fun (k, v) -> Lwt_io.printf "%Ld -> %s\n" *)
+      (*                     (EndianString.BigEndian.get_int64 k 0) *)
+      (*                     (sha1_to_hex ~nb_digit:7 k)) kvs *)
     );
   let forever period =
     let rec inner () =
-      (match Random.int 4 with
+      (match Random.int 1 with
       | 0 | 3 -> (* ADD (frequency two times more) *)
         let rint = Random.bits () |> Int64.of_int in
         let r = String.create 8 in

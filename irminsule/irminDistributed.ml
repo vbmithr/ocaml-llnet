@@ -374,7 +374,8 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
     let hello_done = ref false in
     let group_reactor c saddr msg =
       if saddr = c.tcp_in_saddr
-      then Lwt.return_unit (* Ignoring own messages *)
+      then
+        Lwt.return_unit (* Ignoring own messages *)
       else
         let payload_len = EndianString.BigEndian.get_uint16 msg 3 in
         (* Storing updates in temporary store if HELLO is not
@@ -388,15 +389,18 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
           Bigstring.From_string.blit ~src:msg ~src_pos:(hdr_size + klen)
             ~dst:v ~dst_pos:0 ~len:key_size;
           RW.update store k v >>= fun () ->
-          Lwt_log.debug_f ~section "<- UPDATEACK %s" (Helpers.string_of_saddr saddr)
+          Lwt_log.debug_f ~section "<- UPDATEACK %s %s" (Helpers.string_of_saddr c.group_saddr)
+            (if !hello_done then "" else "(in tmp store)")
         | REMOVE ->
           let k = String.sub msg hdr_size payload_len in
           RW.remove store k >>= fun () ->
-          Lwt_log.debug_f ~section "<- REMOVEACK %s" (Helpers.string_of_saddr saddr)
+          Lwt_log.debug_f ~section "<- REMOVEACK %s %s" (Helpers.string_of_saddr c.group_saddr)
+            (if !hello_done then "" else "(in tmp store)")
         | _ -> Lwt.return_unit
     in
     let tcp_reactor c fd saddr =
       let tcpbuf = String.create 4096 in
+      (* Reading header. *)
       Lwt_unix.recv fd tcpbuf 0 hdr_size [] >>= fun nb_read ->
       if nb_read <> hdr_size then
         Lwt_log.debug_f ~section "TCP reactor: Corrupted message from %s"
@@ -433,32 +437,39 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
               mstring (Helpers.string_of_saddr saddr)
           else
             Lwt_log.debug_f ~section "<- %s %s" mstring (Helpers.string_of_saddr saddr) >>= fun () ->
+            (* Rewritting the port because we will resend this message
+               on the multicast channel. *)
+            EndianString.BigEndian.set_int16 tcpbuf 1 (Helpers.port_of_saddr c.tcp_in_saddr);
             let payload_len = EndianString.BigEndian.get_uint16 tcpbuf 3 in
-            try_lwt
-              Lwt_unix.recv_into_exactly fd tcpbuf hdr_size payload_len [] >>= fun () ->
-              (if m = REMOVE
-               then
-                 RW.remove store (String.sub tcpbuf hdr_size payload_len) >>= fun () ->
-                 Lwt_unix.really_sendto c.group_sock tcpbuf 0 (hdr_size + payload_len) [] c.group_saddr
-               else
-                 RW.update store (String.sub tcpbuf hdr_size (payload_len - key_size))
-                   (Bigstring.From_string.sub tcpbuf
-                      ~pos:(hdr_size + payload_len - key_size) ~len:key_size) >>= fun () ->
-                 Lwt_unix.really_sendto c.group_sock tcpbuf 0 (hdr_size + payload_len) [] c.group_saddr)
-              >>= fun () ->
-              Lwt_log.debug_f ~section "-> %sACK %s" mstring (Helpers.string_of_saddr saddr)
-            with exn ->
-              Lwt_log.debug_f ~section ~exn "-> %sACK %s FAILED"
-                mstring (Helpers.string_of_saddr saddr)
-            finally
-              Lwt_unix.close fd
+            (try_lwt
+               (* Reading the rest of the message *)
+               Lwt_unix.recv_into_exactly fd tcpbuf hdr_size payload_len [] >>= fun () ->
+               (if m = REMOVE
+                then
+                  RW.remove store (String.sub tcpbuf hdr_size payload_len) >>= fun () ->
+                  Lwt_unix.really_sendto c.group_sock tcpbuf 0
+                    (hdr_size + payload_len) [] c.group_saddr
+                else
+                  RW.update store (String.sub tcpbuf hdr_size (payload_len - key_size))
+                    (Bigstring.From_string.sub tcpbuf
+                       ~pos:(hdr_size + payload_len - key_size) ~len:key_size) >>= fun () ->
+                  Lwt_unix.really_sendto c.group_sock tcpbuf 0
+                    (hdr_size + payload_len) [] c.group_saddr)
+               >>= fun () ->
+               Lwt_log.debug_f ~section "-> %sACK %s" mstring
+                 (Helpers.string_of_saddr c.group_saddr)
+             with exn ->
+               Lwt_log.debug_f ~section ~exn "-> %sACK %s FAILED"
+                 mstring (Helpers.string_of_saddr c.group_saddr)
+             finally
+               Lwt_unix.close fd)
 
-            | _ -> Lwt.return_unit
+        | _ -> Lwt.return_unit
     in
     let say_hello c =
       match first_neighbour c with
       | None -> (* I am alone on network, skipping HELLO *)
-        Lwt.return_unit
+        Lwt.return (hello_done := true)
       | Some saddr ->
         let msgbuf = String.create 512 in
         msgbuf.[0] <- int_of_protocol HELLO |> Char.of_int_exn;
@@ -480,11 +491,12 @@ module RW(RW: IrminStore.RW_BINARY) (C: CONFIG) : IrminStore.RW_BINARY = struct
               (Bigstring.From_string.sub msgbuf ~pos:klen ~len:key_size) >>= fun () ->
             import_kvs (succ n)
             with exn ->
-              Lwt_log.debug_f ~section ~exn "<- HELLOACK %s terminated, %d keys recv"
-                (Helpers.string_of_saddr saddr) n >>= fun () ->
               (* Replaying tmp_store on top of store. *)
               RW.contents tmp_store >>= fun cts ->
-              Lwt_list.iter_s (fun (k,v) -> RW.update store k v) cts
+              Lwt_list.iter_s (fun (k,v) -> RW.update store k v) cts >>= fun () ->
+              Lwt_log.debug_f ~section ~exn
+              "<- HELLOACK %s terminated: %d keys recv, %d replayed from tmp store"
+              (Helpers.string_of_saddr saddr) n (List.length cts)
               >|= fun () -> hello_done := true
           in import_kvs 0
         with exn ->
