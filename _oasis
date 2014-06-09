@@ -6,8 +6,9 @@ Authors: Vincent Bernardoff <vb@luminar.eu.org>
 License: ISC
 Plugins: META (0.4), DevFiles (0.4)
 BuildTools: ocamlbuild
+AlphaFeatures: compiled_setup_ml
 
-Flag irminsule
+Flag irmin
   Description: Build IrminDistributed.
   Default: true
 
@@ -18,11 +19,11 @@ Library llnet
   CompiledObject: best
 
 Library irmindistributed
-  Build$: flag(irminsule)
-  Install$: flag (irminsule)
-  Path: irminsule
+  Build$: flag(irmin)
+  Install$: flag (irmin)
+  Path: irmin
   Modules: IrminDistributed
-  BuildDepends: irminsule, llnet, lwt.syntax
+  BuildDepends: irmin, llnet, lwt.syntax
   CompiledObject: best
 
 Executable test_membership
@@ -33,17 +34,17 @@ Executable test_membership
   Install: false
 
 Executable test_ao
-  Build$: flag(irminsule)
+  Build$: flag(irmin)
   Install: false
-  Path: irminsule_test
+  Path: irmin_test
   MainIs: test_ao.ml
   CompiledObject: best
-  BuildDepends: irminsule.backend, irmindistributed
+  BuildDepends: irmin.backend, irmindistributed
 
 Executable test_rw
-  Build$: flag(irminsule)
+  Build$: flag(irmin)
   Install: false
-  Path: irminsule_test
+  Path: irmin_test
   MainIs: test_rw.ml
   CompiledObject: best
-  BuildDepends: irminsule.backend, irmindistributed
+  BuildDepends: irmin.backend, irmindistributed
