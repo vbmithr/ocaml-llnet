@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 67a10552b487e78c12451970fbf28556)
+# DO NOT EDIT (digest: e17521d0ba05bea49fb7d441e4481b89)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -15,6 +15,10 @@
 "_darcs": not_hygienic
 # Library llnet
 "lib/llnet.cmxs": use_llnet
+<lib/llnet.{cma,cmxa}>: oasis_library_llnet_byte
+<lib/*.ml{,i}>: oasis_library_llnet_byte
+<lib/llnet.{cma,cmxa}>: oasis_library_llnet_native
+<lib/*.ml{,i}>: oasis_library_llnet_native
 <lib/*.ml{,i}>: pkg_cryptokit
 <lib/*.ml{,i}>: pkg_ipaddr.unix
 <lib/*.ml{,i}>: pkg_lwt.unix
@@ -23,6 +27,10 @@
 <lib/*.ml{,i}>: pkg_tuntap
 # Library irmindistributed
 "irmin/irmindistributed.cmxs": use_irmindistributed
+<irmin/irmindistributed.{cma,cmxa}>: oasis_library_irmindistributed_byte
+<irmin/*.ml{,i}>: oasis_library_irmindistributed_byte
+<irmin/irmindistributed.{cma,cmxa}>: oasis_library_irmindistributed_native
+<irmin/*.ml{,i}>: oasis_library_irmindistributed_native
 <irmin/*.ml{,i}>: pkg_cryptokit
 <irmin/*.ml{,i}>: pkg_ipaddr.unix
 <irmin/*.ml{,i}>: pkg_irmin
@@ -33,6 +41,10 @@
 <irmin/*.ml{,i}>: pkg_tuntap
 <irmin/*.ml{,i}>: use_llnet
 # Executable test_membership
+<test/test_membership.{native,byte}>: oasis_executable_test_membership_byte
+<test/*.ml{,i}>: oasis_executable_test_membership_byte
+<test/test_membership.{native,byte}>: oasis_executable_test_membership_native
+<test/*.ml{,i}>: oasis_executable_test_membership_native
 <test/test_membership.{native,byte}>: pkg_cryptokit
 <test/test_membership.{native,byte}>: pkg_ipaddr.unix
 <test/test_membership.{native,byte}>: pkg_lwt.unix
@@ -48,6 +60,10 @@
 <test/*.ml{,i}>: pkg_tuntap
 <test/*.ml{,i}>: use_llnet
 # Executable test_ao
+<irmin_test/test_ao.{native,byte}>: oasis_executable_test_ao_byte
+<irmin_test/*.ml{,i}>: oasis_executable_test_ao_byte
+<irmin_test/test_ao.{native,byte}>: oasis_executable_test_ao_native
+<irmin_test/*.ml{,i}>: oasis_executable_test_ao_native
 <irmin_test/test_ao.{native,byte}>: pkg_cryptokit
 <irmin_test/test_ao.{native,byte}>: pkg_ipaddr.unix
 <irmin_test/test_ao.{native,byte}>: pkg_irmin
@@ -60,6 +76,10 @@
 <irmin_test/test_ao.{native,byte}>: use_irmindistributed
 <irmin_test/test_ao.{native,byte}>: use_llnet
 # Executable test_rw
+<irmin_test/test_rw.{native,byte}>: oasis_executable_test_rw_byte
+<irmin_test/*.ml{,i}>: oasis_executable_test_rw_byte
+<irmin_test/test_rw.{native,byte}>: oasis_executable_test_rw_native
+<irmin_test/*.ml{,i}>: oasis_executable_test_rw_native
 <irmin_test/test_rw.{native,byte}>: pkg_cryptokit
 <irmin_test/test_rw.{native,byte}>: pkg_ipaddr.unix
 <irmin_test/test_rw.{native,byte}>: pkg_irmin

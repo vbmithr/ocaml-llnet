@@ -17,6 +17,8 @@ Library llnet
   Modules: Llnet
   BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit, tuntap
   CompiledObject: best
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
 
 Library irmindistributed
   Build$: flag(irmin)
@@ -25,6 +27,8 @@ Library irmindistributed
   Modules: IrminDistributed
   BuildDepends: irmin, llnet, lwt.syntax
   CompiledObject: best
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
 
 Executable test_membership
   Path: test
@@ -32,6 +36,8 @@ Executable test_membership
   BuildDepends: llnet
   CompiledObject: best
   Install: false
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
 
 Executable test_ao
   Build$: flag(irmin)
@@ -40,11 +46,15 @@ Executable test_ao
   MainIs: test_ao.ml
   CompiledObject: best
   BuildDepends: irmin.backend, irmindistributed
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
 
 Executable test_rw
-  Build$: flag(irmin)
+  Build$: false
   Install: false
   Path: irmin_test
   MainIs: test_rw.ml
   CompiledObject: best
   BuildDepends: irmin.backend, irmindistributed
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
