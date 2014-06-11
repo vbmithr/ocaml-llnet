@@ -12,22 +12,22 @@ let sha1_to_hex ?nb_digit s =
   | Some n -> String.sub hex 0 n
 
 let main dao vsize =
-  let module DAO = (val dao : IrminStore.AO_BINARY) in
+  let module DAO = (val dao : IrminStore.AO with type key = IrminKey.SHA1.t and type value = IrminIdent.String.t) in
   let open DAO in
   create () >>= fun store ->
   Lwt_main.at_exit (fun () ->
-      contents store >>= fun kvs ->
+      dump store >>= fun kvs ->
       Lwt_io.printf "\nExiting with %d keys in store\n" (List.length kvs) >>= fun () ->
-      Lwt_list.iter_s (fun (k, _) -> Lwt_io.printf "%s " (sha1_to_hex ~nb_digit:7 k)) kvs
+      Lwt_list.iter_s (fun (k, _) -> Lwt_io.printf "%s " (sha1_to_hex ~nb_digit:7 (IrminKey.SHA1.to_raw k))) kvs
       >>= fun () ->
       Lwt_io.printf "\n"
     );
   let add_forever period =
     let rec inner () =
-      let v = Bigstring.create (max 4 vsize) in
+      let v = String.create (max 4 vsize) in
       let seed = Random.bits () |> Int64.of_int in
-      EndianBigstring.BigEndian.set_int64 v 0 seed;
-      add store v >>= fun (_:string) ->
+      EndianString.BigEndian.set_int64 v 0 seed;
+      add store (IrminIdent.String.of_string v) >>= fun _ ->
       Lwt_unix.sleep period >>= fun () ->
       inner ()
     in inner ()
@@ -55,5 +55,8 @@ let () =
     let mcast_port = !group_port
     let key_size = 20
   end in
-  let module DAO = IrminDistributed.AO(IrminMemory.AO(IrminKey.SHA1))(Conf) in
-  Lwt_main.run (main (module DAO: IrminStore.AO_BINARY) !vsize)
+  let module DAO = IrminDistributed.AO(Conf)(IrminMemory.AO)(IrminKey.SHA1)(IrminIdent.String) in
+  Lwt_main.run (main
+                  (module DAO: IrminStore.AO
+                    with type key = IrminKey.SHA1.t
+                     and type value = IrminIdent.String.t) !vsize)
