@@ -49,6 +49,16 @@ Executable test_ao
   ByteOpt: -bin-annot
   NativeOpt: -bin-annot
 
+Executable test_irmin
+  Build$: flag(irmin)
+  Install: false
+  Path: irmin_test
+  MainIs: test_irmin.ml
+  CompiledObject: best
+  BuildDepends: irmin.backend, irmindistributed
+  ByteOpt: -bin-annot
+  NativeOpt: -bin-annot
+
 Executable test_rw
   Build$: false
   Install: false

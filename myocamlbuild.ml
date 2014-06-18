@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: a8385a79f3c25a2510ec4dab0ce4885e) *)
+(* DO NOT EDIT (digest: fa5312a2448dde2b2e23c617abb099e7) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -694,6 +694,28 @@ let package_default =
             [(OASISExpr.EBool true, S [A "-bin-annot"])]);
           (["oasis_executable_test_ao_native"; "ocaml"; "compile"; "native"],
             [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          (["oasis_executable_test_irmin_byte"; "ocaml"; "link"; "byte"],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          (["oasis_executable_test_irmin_native"; "ocaml"; "link"; "native"],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          (["oasis_executable_test_irmin_byte"; "ocaml"; "ocamldep"; "byte"],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          ([
+              "oasis_executable_test_irmin_native";
+              "ocaml";
+              "ocamldep";
+              "native"
+           ],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          (["oasis_executable_test_irmin_byte"; "ocaml"; "compile"; "byte"],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+          ([
+              "oasis_executable_test_irmin_native";
+              "ocaml";
+              "compile";
+              "native"
+           ],
+            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
           (["oasis_executable_test_rw_byte"; "ocaml"; "link"; "byte"],
             [(OASISExpr.EBool true, S [A "-bin-annot"])]);
           (["oasis_executable_test_rw_native"; "ocaml"; "link"; "native"],
@@ -714,6 +736,6 @@ let package_default =
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default package_default;;
 
-# 718 "myocamlbuild.ml"
+# 740 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
