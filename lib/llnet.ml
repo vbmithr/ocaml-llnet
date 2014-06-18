@@ -3,6 +3,20 @@
 let init_ttl = 5
 let hdr_size = 5
 
+(* Message format used by the protocol:
+
+0   1   2   3   4   5
+---------------------
+| T | port  | size  |
+---------------------
+
+T: 1 byte, message type
+port: 2 bytes, tcp port of the host
+size: 2 bytes, message size not including the header
+
+*)
+
+
 (*****************)
 
 let (>>=) = Lwt.(>>=)
