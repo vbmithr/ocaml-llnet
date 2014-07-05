@@ -55,7 +55,7 @@ Executable test_irmin
   Path: irmin_test
   MainIs: test_irmin.ml
   CompiledObject: best
-  BuildDepends: irmin.backend, irmindistributed
+  BuildDepends: irmin.backend, irmin.unix, irmindistributed
   ByteOpt: -bin-annot
   NativeOpt: -bin-annot
 

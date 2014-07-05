@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 927ebcbb4538ffa36993ce5c0985c304)
+# DO NOT EDIT (digest: 7bb00e5a18369ae76ec770b7d52030cf)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -84,6 +84,7 @@
 <irmin_test/test_irmin.{native,byte}>: pkg_ipaddr.unix
 <irmin_test/test_irmin.{native,byte}>: pkg_irmin
 <irmin_test/test_irmin.{native,byte}>: pkg_irmin.backend
+<irmin_test/test_irmin.{native,byte}>: pkg_irmin.unix
 <irmin_test/test_irmin.{native,byte}>: pkg_lwt.syntax
 <irmin_test/test_irmin.{native,byte}>: pkg_lwt.unix
 <irmin_test/test_irmin.{native,byte}>: pkg_ocplib-endian
@@ -91,6 +92,7 @@
 <irmin_test/test_irmin.{native,byte}>: pkg_tuntap
 <irmin_test/test_irmin.{native,byte}>: use_irmindistributed
 <irmin_test/test_irmin.{native,byte}>: use_llnet
+<irmin_test/*.ml{,i}>: pkg_irmin.unix
 # Executable test_rw
 <irmin_test/test_rw.{native,byte}>: oasis_executable_test_rw_byte
 <irmin_test/*.ml{,i}>: oasis_executable_test_rw_byte
@@ -119,3 +121,6 @@
 <irmin_test/*.ml{,i}>: use_irmindistributed
 <irmin_test/*.ml{,i}>: use_llnet
 # OASIS_STOP
+<lib/*>: lwtbacktrace
+<irmin/*>: lwtbacktrace
+<irmin_test/*>: lwtbacktrace
