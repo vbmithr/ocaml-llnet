@@ -99,7 +99,7 @@ let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
     let open Tuntap in
     List.fold_left
       (fun a { name; ipaddr } -> match name, ipaddr with
-         | name, AF_INET6 (addr, _) when Ipaddr.(V6.scope addr = Link) && name = iface ->
+         | name, AF_INET6 (addr, _) when Ipaddr.(V6.is_private addr) && name = iface ->
            Some (Ipaddr_unix.V6.to_inet_addr addr)
          | _ -> a
       ) None (Tuntap.getifaddrs ()) in
