@@ -38,6 +38,12 @@ module Helpers = struct
     | Unix.ADDR_INET (a, _) -> Ipaddr_unix.V6.of_inet_addr_exn a
     | _ -> raise (Invalid_argument "v6addr_of_saddr")
 
+  let v6addr_port_of_saddr saddr =
+    let open Unix in
+    match saddr with
+    | ADDR_INET (a, p) -> Ipaddr_unix.V6.of_inet_addr_exn a, p
+    | _ -> raise (Invalid_argument "v6addr_of_saddr")
+
   let saddr_with_port saddr port =
     match saddr with
     | Unix.ADDR_INET (a, _) -> Unix.ADDR_INET (a, port)
@@ -83,15 +89,15 @@ let peer_ignored h p =
   with Not_found -> false
 
 let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
-    iface v6addr port mcast_reactor tcp_reactor =
+    iface group_addr port mcast_reactor tcp_reactor =
   (* Join multicast group and bind socket to the group address. *)
   let group_sock = Unix.(socket PF_INET6 SOCK_DGRAM 0) in
   let tcp_in_sock = Unix.(socket PF_INET6 SOCK_STREAM 0) in
   Unix.handle_unix_error (fun () ->
       Unix.(setsockopt group_sock SO_REUSEADDR true);
       Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
-      Sockopt.IPV6.membership ~iface group_sock v6addr `Join;
-      Sockopt.bind6 ~iface group_sock v6addr port;
+      Sockopt.IPV6.membership ~iface group_sock group_addr `Join;
+      Sockopt.bind6 ~iface group_sock group_addr port;
       Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified 0;
       Unix.listen tcp_in_sock 5;
     ) ();
@@ -105,12 +111,13 @@ let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
       ) None (Tuntap.getifaddrs ()) in
   let tcp_in_saddr = Unix.(match my_ipaddr, (getsockname tcp_in_sock) with
       | Some ip, ADDR_INET (a, p) -> ADDR_INET (ip, p)
+      | None, _ -> failwith (Printf.sprintf "Interface %s either do not exist or does not have an associated IPv6 address" iface)
       | _ -> raise (Invalid_argument "tcp_in_saddr")) in
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
   let h =
     { group_sock;
-      group_saddr = saddr_of_v6addr_port v6addr port;
+      group_saddr = saddr_of_v6addr_port group_addr port;
       tcp_in_sock;
       tcp_in_saddr;
       peers = SaddrMap.singleton tcp_in_saddr (init_ttl, false)

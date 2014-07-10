@@ -4,6 +4,9 @@
 module Helpers : sig
   val string_of_saddr : Unix.sockaddr -> string
   val port_of_saddr : Unix.sockaddr -> int
+  val v6addr_of_saddr : Unix.sockaddr -> Ipaddr.V6.t
+  val v6addr_port_of_saddr : Unix.sockaddr -> Ipaddr.V6.t * int
+  val saddr_with_port : Unix.sockaddr -> int -> Unix.sockaddr
 end
 
 module SaddrMap : Map.S with type key = Unix.sockaddr

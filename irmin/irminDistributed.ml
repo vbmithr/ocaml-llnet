@@ -1,4 +1,5 @@
 open Llnet
+open Llnet.Helpers
 open Core_kernel.Std
 
 let (>>=) = Lwt.(>>=)
@@ -42,30 +43,6 @@ module Lwt_unix = struct
       if nb_sent = len then Lwt.return_unit
       else inner ()
     in inner ()
-
-  let recv_into_bigstring_exactly ?(buf=String.create 4096) fd bs pos len flags =
-    let bufsize = String.length buf in
-    let rec inner pos len =
-      if len > 0 then
-        recv fd buf 0 (min bufsize len) flags >>= function
-        | 0 -> Lwt.fail End_of_file
-        | nb_recv ->
-          Bigstring.From_string.blit ~src:buf ~src_pos:0 ~dst:bs ~dst_pos:pos ~len:nb_recv;
-          inner (pos+nb_recv) (len-nb_recv)
-      else Lwt.return_unit
-    in inner pos len
-
-  let send_from_bigstring_exactly ?(buf=String.create 4096) fd bs pos len flags =
-    let bufsize = String.length buf in
-    let rec inner pos len =
-      if len > 0 then
-        (
-          Bigstring.To_string.blit ~src:bs ~src_pos:pos ~dst:buf ~dst_pos:0 ~len:(min bufsize len);
-          send fd buf 0 (min bufsize len) flags >>= fun nb_sent ->
-          inner (pos+nb_sent) (len-nb_sent)
-        )
-      else Lwt.return_unit
-    in inner pos len
 end
 
 type protocol =
@@ -100,19 +77,6 @@ let string_of_protocol = function
   | HELLOACK -> "HELLOACK"
   | UPDATE -> "UPDATE"
   | REMOVE -> "REMOVE"
-
-let saddr_with_port saddr port =
-  let open Unix in
-  match saddr with
-  | ADDR_INET (a, _) -> ADDR_INET (a, port)
-  | _ -> raise (Invalid_argument "saddr_with_port")
-
-let v6addr_of_saddr saddr =
-  let open Unix in
-  match saddr with
-  | ADDR_INET (a, p) -> Ipaddr_unix.V6.of_inet_addr_exn a, p
-  | _ -> raise (Invalid_argument "v6addr_of_saddr")
-
 
 module type CONFIG = sig
   val iface : string
@@ -193,7 +157,7 @@ module AO (C : CONFIG) (IAO : Irmin.AO_MAKER) (K: IrminKey.S) (V: IrminIdent.S) 
                   (
                     let s = Unix.(socket PF_INET6 SOCK_STREAM 0) in
                     try_lwt
-                      let addr, port = v6addr_of_saddr saddr in
+                      let addr, port = v6addr_port_of_saddr saddr in
                       Sockopt.connect6 ~iface:C.iface s addr port;
                       let s = Lwt_unix.of_unix_file_descr s in
                       msg.[0] <- int_of_protocol KEYREQ |> Char.of_int_exn;
@@ -231,7 +195,7 @@ module AO (C : CONFIG) (IAO : Irmin.AO_MAKER) (K: IrminKey.S) (V: IrminIdent.S) 
               let k_sent = ref 0 in
               let v_sent = ref 0 in
               try_lwt
-                let addr, port = v6addr_of_saddr saddr in
+                let addr, port = v6addr_port_of_saddr saddr in
                 Sockopt.connect6 ~iface:C.iface s addr port;
                 let s = Lwt_unix.of_unix_file_descr s in
                 AO.dump store >>= fun kvs ->
