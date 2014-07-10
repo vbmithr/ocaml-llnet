@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 7bb00e5a18369ae76ec770b7d52030cf)
+# DO NOT EDIT (digest: 4f1f8d30d2956a4160e563122f516466)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -47,6 +47,7 @@
 <test/*.ml{,i}>: oasis_executable_test_membership_native
 <test/test_membership.{native,byte}>: pkg_cryptokit
 <test/test_membership.{native,byte}>: pkg_ipaddr.unix
+<test/test_membership.{native,byte}>: pkg_lwt.syntax
 <test/test_membership.{native,byte}>: pkg_lwt.unix
 <test/test_membership.{native,byte}>: pkg_ocplib-endian
 <test/test_membership.{native,byte}>: pkg_sockopt
@@ -54,6 +55,7 @@
 <test/test_membership.{native,byte}>: use_llnet
 <test/*.ml{,i}>: pkg_cryptokit
 <test/*.ml{,i}>: pkg_ipaddr.unix
+<test/*.ml{,i}>: pkg_lwt.syntax
 <test/*.ml{,i}>: pkg_lwt.unix
 <test/*.ml{,i}>: pkg_ocplib-endian
 <test/*.ml{,i}>: pkg_sockopt

@@ -33,7 +33,7 @@ Library irmindistributed
 Executable test_membership
   Path: test
   MainIs: test_membership.ml
-  BuildDepends: llnet
+  BuildDepends: llnet, lwt.syntax
   CompiledObject: best
   Install: false
   ByteOpt: -bin-annot
