@@ -10,7 +10,7 @@ AlphaFeatures: compiled_setup_ml
 
 Flag irmin
   Description: Build IrminDistributed.
-  Default: true
+  Default: false
 
 Library llnet
   Path: lib
