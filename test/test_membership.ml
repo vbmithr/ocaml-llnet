@@ -62,7 +62,7 @@ let main iface addr port =
     Printf.printf "I am peer number %d and my group is:\n%!" (order h);
     Lwt_list.iter_s
       (fun (k, (ttl, ign)) ->
-         Printf.printf "  %s -> TTL=%d, ignored=%b%!" (Helpers.string_of_saddr k) ttl ign;
+         Printf.printf "  %s -> TTL=%d, ignored=%b" (Helpers.string_of_saddr k) ttl ign;
          obtain_ipv4addr_from_peers k >>= fun () ->
          (try
             let ipv4 = Hashtbl.find peers_ipv4addr k in

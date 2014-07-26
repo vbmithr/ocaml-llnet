@@ -19,7 +19,8 @@ type t = {
   group_saddr: Unix.sockaddr; (* multicast group sockaddr. *)
   tcp_in_sock: Lwt_unix.file_descr; (* TCP socket for incoming connection. *)
   tcp_in_saddr: Unix.sockaddr; (* sockaddr of the incoming TCP socket. *)
-  mutable peers: (int * bool) SaddrMap.t (* Map of saddr -> TTL * ignored *)
+  mutable peers: (int * bool) SaddrMap.t; (* Map of saddr -> TTL * ignored *)
+  not_alone: bool Lwt_condition.t (* Notification when a first peer is detected *)
 }
 (** Handler to a connection to a multicast network. *)
 
@@ -45,9 +46,9 @@ val connect :
 val order : t -> int
 (** [order c] is the order of oneself in the list of peers *)
 
-val first_neighbour : t -> Unix.sockaddr option
-(** [first_neighbour c] is the sockaddr of the neighbour (not oneself)
-    of smallest order that is not ignored. *)
+val neighbours : t -> Unix.sockaddr list Lwt.t
+(** [neighbours c] is the list of neighbours (not oneself)
+    that are not ignored, in sockaddr order. *)
 
 val ignore_peer : t -> Unix.sockaddr -> unit
 (** [ignore_peer c peer] do not forward user messages from peer [peer]

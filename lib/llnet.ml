@@ -72,6 +72,7 @@ type t = {
   tcp_in_sock: Lwt_unix.file_descr;
   tcp_in_saddr: Unix.sockaddr;
   mutable peers: (int * bool) SaddrMap.t;
+  not_alone: bool Lwt_condition.t
 }
 
 type typ =
@@ -87,6 +88,9 @@ let typ_of_int = function
 let peer_ignored h p =
   try SaddrMap.find p h.peers |> snd
   with Not_found -> false
+
+let valid_cardinal peers =
+  SaddrMap.fold (fun saddr (ttl, ign) a -> if ign || ttl <= 0 then a else succ a) peers 0
 
 let connect
     ?(ival=1.)
@@ -125,7 +129,8 @@ let connect
       group_saddr = saddr_of_v6addr_port group_addr port;
       tcp_in_sock;
       tcp_in_saddr;
-      peers = SaddrMap.singleton tcp_in_saddr (init_ttl, false)
+      peers = SaddrMap.singleton tcp_in_saddr (init_ttl, false);
+      not_alone = Lwt_condition.create ()
     }
   in
 
@@ -135,14 +140,10 @@ let connect
   EndianString.BigEndian.set_int16 idmsg 1 (port_of_saddr tcp_in_saddr);
   EndianString.BigEndian.set_int16 idmsg 3 (String.length idmsg - hdr_size);
 
-  let connect_wait, connect_wakeup = Lwt.wait () in
-
   (* ping group every ival seconds *)
   let ping ival =
     let rec inner n =
-      (* connect can now return! *)
-      if n = 2 then Lwt.wakeup connect_wakeup ();
-      (* Decrease TTL of all members *)
+      (* Decrease TTL of all members and remove the expired ones *)
       h.peers <- SaddrMap.fold (fun k (ttl, ign) a ->
           if ttl > 0 then SaddrMap.add k (pred ttl, ign) a
           else a
@@ -164,6 +165,8 @@ let connect
       with Not_found ->
         h.peers <- SaddrMap.add saddr (init_ttl, false) h.peers
       );
+      if valid_cardinal h.peers = 2 (* We just detected a first peer *)
+      then Lwt_condition.broadcast h.not_alone true;
       Lwt.return_unit
   in
 
@@ -227,7 +230,7 @@ let connect
   Lwt.async (fun () -> react group_sock process);
   Lwt.async (fun () -> tcp_wait >>= fun () -> accept_forever tcp_in_sock);
   Lwt.async (fun () -> ping ival);
-  connect_wait >|= fun () -> h
+  Lwt.return h
 
 let ignore_peer h p =
   try
@@ -244,11 +247,17 @@ let order h =
   in
   List.find (fun (k, _) -> h.tcp_in_saddr = k) indexed_list |> snd
 
-let first_neighbour h =
-  SaddrMap.fold
-    (fun saddr (ttl, ignored) a ->
-       if ttl > 0 && not ignored && saddr <> h.tcp_in_saddr
-       then Some saddr
-       else a
-    )
-    h.peers None
+let neighbours h =
+  (if valid_cardinal h.peers < 2
+  then Lwt_condition.wait h.not_alone
+  else Lwt.return true)
+  >>= fun _ ->
+  let peers_rev_list =
+    SaddrMap.fold
+      (fun saddr (ttl, ignored) a ->
+         if ttl > 0 && not ignored && saddr <> h.tcp_in_saddr
+         then saddr::a
+         else a
+      )
+      h.peers [] in
+  Lwt.return (List.rev peers_rev_list)
