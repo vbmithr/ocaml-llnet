@@ -311,7 +311,7 @@ module AO (C : CONFIG) (IAO : Irmin.AO_MAKER) (K: IrminKey.S) (V: IrminIdent.S) 
       AO.dump store >>= fun kvs ->
       Lwt_list.iter_s (fun (k, v) -> new_key ~msgbuf c k v) kvs
     in
-    connect iface mcast_addr mcast_port group_reactor tcp_reactor >>= fun c ->
+    connect ~group_reactor ~tcp_reactor ~iface mcast_addr mcast_port  >>= fun c ->
     say_hello c >|= fun () ->
     (store, c)
 

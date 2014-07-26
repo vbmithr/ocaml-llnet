@@ -25,8 +25,8 @@ let main iface mcast_addr mcast_port ksize =
   let module IS = IrminHTTP.Make(I) in
   I.create () >>= fun store ->
 
-  Llnet.connect iface mcast_addr mcast_port
-      (fun f saddr msg ->
+  Llnet.connect ~iface mcast_addr mcast_port
+    ~group_reactor:(fun f saddr msg ->
         let remote_port = EndianString.BigEndian.get_uint16 msg 1 in
         let saddr = saddr_with_port saddr remote_port in
         let saddr_str = match saddr with
@@ -43,7 +43,7 @@ let main iface mcast_addr mcast_port ksize =
         (*   I.Sync.merge_exn store new_store (\* TODO: do sth with the exn *\) *)
         (* | None -> Lwt.return_unit (\* Keep our store *\) *)
       )
-      (fun _ _ _ -> Lwt.return_unit) >>= fun c ->
+    ~tcp_reactor:(fun _ _ _ -> Lwt.return_unit) >>= fun c ->
 
   let my_tcp_port = Llnet.(Helpers.port_of_saddr c.tcp_in_saddr) in
   (* Close Llnet TCP insock that we do not use, and use the port for

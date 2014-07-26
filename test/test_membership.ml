@@ -56,7 +56,7 @@ let main iface addr port =
         Lwt_unix.safe_close s
 
   in
-  connect iface addr port group_reactor tcp_reactor >>= fun h ->
+  connect ~group_reactor ~tcp_reactor ~iface addr port  >>= fun h ->
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
     Printf.printf "I am peer number %d and my group is:\n%!" (order h);

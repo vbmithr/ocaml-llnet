@@ -88,8 +88,13 @@ let peer_ignored h p =
   try SaddrMap.find p h.peers |> snd
   with Not_found -> false
 
-let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
-    iface group_addr port mcast_reactor tcp_reactor =
+let connect
+    ?(ival=1.)
+    ?(udp_wait=Lwt.return_unit)
+    ?(tcp_wait=Lwt.return_unit)
+    ?(group_reactor=(fun _ _ _ -> Lwt.return_unit))
+    ?(tcp_reactor=(fun _ fd _ -> Lwt_unix.close fd >>= fun () -> Lwt.return_unit))
+    ~iface group_addr port =
   (* Join multicast group and bind socket to the group address. *)
   let group_sock = Unix.(socket PF_INET6 SOCK_DGRAM 0) in
   let tcp_in_sock = Unix.(socket PF_INET6 SOCK_STREAM 0) in
@@ -152,7 +157,7 @@ let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
   let base_reactor saddr buf =
     match typ_of_int (Char.code buf.[0]) with
     | PING ->
-      Lwt_log.ign_info ~section "Received PING.";
+      Lwt_log.ign_info ~section "Received PING";
       (try
         let ttl, ign = SaddrMap.find saddr h.peers in
         h.peers <- SaddrMap.add saddr (init_ttl, ign) h.peers
@@ -168,13 +173,13 @@ let connect ?(ival=1.) ?(udp_wait=Lwt.return_unit) ?(tcp_wait=Lwt.return_unit)
     match buf.[0], peer_ignored h saddr with
     | c,  _ when c < '\100' -> (* control msg *)
       (
-        Lwt_log.ign_debug ~section "Receiving a control msg.";
+        Lwt_log.ign_debug ~section "Receiving a control msg";
         Lwt.async (fun () -> base_reactor saddr buf)
       )
     | _, false ->
       (
         Lwt_log.ign_debug ~section "Receiving a user msg, forwarding";
-        Lwt.async (fun () -> udp_wait >>= fun () -> mcast_reactor h saddr buf)
+        Lwt.async (fun () -> udp_wait >>= fun () -> group_reactor h saddr buf)
       )
     | _ -> ()
   in

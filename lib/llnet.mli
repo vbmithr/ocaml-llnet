@@ -30,17 +30,17 @@ val connect :
   ?ival:float ->
   ?udp_wait:unit Lwt.t ->
   ?tcp_wait:unit Lwt.t ->
-  string -> Ipaddr.V6.t -> int ->
-  (t -> Unix.sockaddr -> string -> unit Lwt.t) ->
-  (t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
-  t Lwt.t
-(** [connect ?ival iface v6addr port group_reactor my_reactor] returns
-    an handler to the multicast network [v6addr:port], where [v6addr]
-    is a IPv6 multicast address, port is the port number to use and
+  ?group_reactor:(t -> Unix.sockaddr -> string -> unit Lwt.t) ->
+  ?tcp_reactor:(t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
+  iface:string ->
+  Ipaddr.V6.t -> int -> t Lwt.t
+(** [connect ?ival ?udp_wait ?tcp_wait ?group_reactor ?tcp_reactor
+    ~iface v6addr port] returns an handler to the multicast network
+    [v6addr:port], where [v6addr:port] is an IPv6 multicast sockaddr,
     [group_reactor] and [my_reactor] are callbacks that will be
     triggered upon receiving a message on the UDP multicast socket,
     resp. the private unicast TCP socket. Neighbours are discovered
-    every [ival] seconds. *)
+    every [ival] seconds (default 1s). *)
 
 val order : t -> int
 (** [order c] is the order of oneself in the list of peers *)
