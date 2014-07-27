@@ -1,6 +1,5 @@
 open Llnet
 open Llnet.Helpers
-open Ipaddr
 
 let (>>=) = Lwt.(>>=)
 
@@ -12,7 +11,7 @@ module Lwt_unix = struct
     | _ -> close s
 end
 
-let main iface addr port =
+let main iface (addr:Ipaddr.t) port =
   let group_reactor _ _ _ = Lwt.return_unit in
   let tcp_reactor h fd remote_saddr =
     (* Returns a serialized list of our IP addresses at the selected
@@ -25,7 +24,7 @@ let main iface addr port =
            match ipaddr with
            | AF_INET6 (a, prefix) -> Lwt.return_unit
            | AF_INET (a, prefix) ->
-             Lwt_unix.write fd (V4.to_bytes a) 0 4 >>= fun nb_written ->
+             Lwt_unix.write fd (Ipaddr.V4.to_bytes a) 0 4 >>= fun nb_written ->
              assert (nb_written = 4);
              Lwt.return_unit
       )
@@ -35,28 +34,27 @@ let main iface addr port =
   let peers_ipv4addr = Hashtbl.create 13 in
   let ipv4buf = String.create 4 in
   let obtain_ipv4addr_from_peers saddr =
-      let ss = Unix.(socket PF_INET6 SOCK_STREAM 0) in
+      let ss = Unix.(socket (domain_of_sockaddr saddr) SOCK_STREAM 0) in
       let s = Lwt_unix.of_unix_file_descr ss in
       try_lwt
-        let addr, port = v6addr_port_of_saddr saddr in
-        Sockopt.connect6 ~iface ss addr port;
+        Sockopt.connect ~iface ss saddr;
         let rec read_one_addr () =
           Lwt_unix.read s ipv4buf 0 4 >>= function
           | 4 ->
-            Hashtbl.replace peers_ipv4addr saddr (V4.of_bytes_exn ipv4buf);
-            Lwt_log.debug_f "Read one IPv4 from %s" (V6.to_string addr) >>= fun () ->
+            Hashtbl.replace peers_ipv4addr saddr (Ipaddr.V4.of_bytes_exn ipv4buf);
+            Lwt_log.debug_f "Read one IPv4 from %s" (Ipaddr.to_string addr) >>= fun () ->
             read_one_addr ()
           | n -> (* done, or error *)
             Lwt_log.debug_f "Lwt_unix.read returned %d" n
         in
         read_one_addr ()
-      with _ ->
-        Lwt_unix.safe_close s
+      with
+      | Unix.Unix_error (Unix.ECONNREFUSED,_,_) -> Lwt_unix.safe_close s
       finally
         Lwt_unix.safe_close s
 
   in
-  connect ~group_reactor ~tcp_reactor ~iface addr port  >>= fun h ->
+  Llnet.connect ~group_reactor ~tcp_reactor ~iface (addr:Ipaddr.t) port  >>= fun h ->
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
     Printf.printf "I am peer number %d and my group is:\n%!" (order h);
@@ -66,7 +64,7 @@ let main iface addr port =
          obtain_ipv4addr_from_peers k >>= fun () ->
          (try
             let ipv4 = Hashtbl.find peers_ipv4addr k in
-          Printf.printf ", ipv4=%s\n%!" (V4.to_string ipv4)
+          Printf.printf ", ipv4=%s\n%!" (Ipaddr.V4.to_string ipv4)
           with Not_found -> Printf.printf "\n%!");
          Lwt.return_unit
       ) (h.peers |> SaddrMap.bindings) >>= fun () ->
@@ -79,7 +77,7 @@ let () =
   let group_port = ref 5555 in
   let speclist = Arg.(align [
       "--iface", Set_string iface, "<string> Interface to use (default: eth0)";
-      "--addr", Set_string group_addr, "<string> IPv6 multicast group address to use (default: ff02::dead:beef)";
+      "--addr", Set_string group_addr, "<string> Multicast group address to use (default: ff02::dead:beef)";
       "--port", Set_int group_port, "<int> Group port to use (default: 5555)";
       "-v", Unit (fun () -> Lwt_log.(add_rule "*" Info)), " Be verbose";
       "-vv", Unit (fun () -> Lwt_log.(add_rule "*" Debug)), " Be more verbose"
@@ -88,4 +86,4 @@ let () =
   let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options>\nOptions are:" in
   Arg.parse speclist anon_fun usage_msg;
 
-  Lwt_main.run (main !iface V6.(of_string_exn !group_addr) !group_port)
+  Lwt_main.run (main !iface (Ipaddr.of_string_exn !group_addr) !group_port)

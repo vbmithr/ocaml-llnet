@@ -6,6 +6,7 @@ module Helpers : sig
   val port_of_saddr : Unix.sockaddr -> int
   val v6addr_of_saddr : Unix.sockaddr -> Ipaddr.V6.t
   val v6addr_port_of_saddr : Unix.sockaddr -> Ipaddr.V6.t * int
+  val addr_port_of_saddr : Unix.sockaddr -> Ipaddr.t * int
   val saddr_with_port : Unix.sockaddr -> int -> Unix.sockaddr
 end
 
@@ -34,10 +35,10 @@ val connect :
   ?group_reactor:(t -> Unix.sockaddr -> string -> unit Lwt.t) ->
   ?tcp_reactor:(t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
   iface:string ->
-  Ipaddr.V6.t -> int -> t Lwt.t
+  Ipaddr.t -> int -> t Lwt.t
 (** [connect ?ival ?udp_wait ?tcp_wait ?group_reactor ?tcp_reactor
-    ~iface v6addr port] returns an handler to the multicast network
-    [v6addr:port], where [v6addr:port] is an IPv6 multicast sockaddr,
+    ~iface addr port] returns an handler to the multicast network
+    [addr:port], where [addr:port] is a multicast sockaddr,
     [group_reactor] and [my_reactor] are callbacks that will be
     triggered upon receiving a message on the UDP multicast socket,
     resp. the private unicast TCP socket. Neighbours are discovered
