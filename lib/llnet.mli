@@ -48,8 +48,12 @@ val order : t -> int
 (** [order c] is the order of oneself in the list of peers *)
 
 val neighbours : t -> Unix.sockaddr list Lwt.t
-(** [neighbours c] is the list of neighbours (not oneself)
-    that are not ignored, in sockaddr order. *)
+(** [neighbours c] is a thread that returns the list of neighbours
+    (not oneself) that are not ignored, in sockaddr order, whenever
+    there is at least one other peer in the network.
+
+    Invariant: never returns []
+*)
 
 val ignore_peer : t -> Unix.sockaddr -> unit
 (** [ignore_peer c peer] do not forward user messages from peer [peer]

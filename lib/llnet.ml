@@ -1,18 +1,14 @@
 (* GLOBAL CONFIG *)
 
 let init_ttl = 5
-let hdr_size = 5
+let hdr_size = 24
 
 (* Message format used by the protocol:
 
-0   1   2   3   4   5
----------------------
-| T | port  | size  |
----------------------
-
-T: 1 byte, message type
-port: 2 bytes, tcp port of the host
-size: 2 bytes, message size not including the header
+T: 2 byte, message type, big endian
+IP addr: 8 bytes, unicast address of the host
+port: 2 bytes, tcp port of the host, big endian
+size: 4 bytes, message size not including the header, big endian
 
 *)
 
@@ -108,12 +104,41 @@ let connect
     ?(group_reactor=(fun _ _ _ -> Lwt.return_unit))
     ?(tcp_reactor=(fun _ fd _ -> Lwt_unix.close fd >>= fun () -> Lwt.return_unit))
     ~iface group_addr port =
-  (* Join multicast group and bind socket to the group address. *)
+
+  (* Find a valid IP address to bind the TCP sock to. If IPv6 is used,
+     a global IPv6 address must be assigned. If IPv4 is used, an IPv4
+     address must be assigned *)
+
   let ipver = match group_addr with
   | Ipaddr.V6 group_addr -> `V6
   | Ipaddr.V4 group_addr -> `V4 in
-  let group_sock = Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_DGRAM 0) in
-  let tcp_in_sock = Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_STREAM 0) in
+
+  let my_ipaddr =
+    let open Tuntap in
+    List.fold_left
+      (fun a { name; ipaddr } -> match name, ipaddr with
+         | name, AF_INET6 (addr, _) when Ipaddr.(V6.is_global addr)
+                                      && name = iface && ipver = `V6 ->
+           Some (Ipaddr.V6 addr)
+         | name, AF_INET (addr, _) when  name = iface && ipver = `V4 ->
+           Some (Ipaddr.V4 addr)
+         | _ -> a
+      ) None (Tuntap.getifaddrs ())
+    |> function
+    | Some ipaddr -> ipaddr
+    | None ->
+      raise (Failure
+               (Printf.sprintf
+                  "Interface %s has no usable IP address associated" iface))
+  in
+
+  (* Join multicast group and bind socket to the group address. *)
+
+  let group_sock =
+    Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_DGRAM 0) in
+  let tcp_in_sock =
+    Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_STREAM 0) in
+
   Unix.handle_unix_error (fun () ->
       Unix.(setsockopt group_sock SO_REUSEADDR true);
       Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
@@ -133,20 +158,10 @@ let connect
         ));
       Unix.listen tcp_in_sock 5;
       ) ();
-  let my_ipaddr =
-    let open Tuntap in
-    List.fold_left
-      (fun a { name; ipaddr } -> match name, ipaddr with
-         | name, AF_INET6 (addr, _) when Ipaddr.(V6.is_private addr) && name = iface && ipver = `V6 ->
-           Some (Ipaddr_unix.V6.to_inet_addr addr)
-         | name, AF_INET (addr, _) when  name = iface && ipver = `V4 ->
-           Some (Ipaddr_unix.V4.to_inet_addr addr)
-         | _ -> a
-      ) None (Tuntap.getifaddrs ()) in
-  let tcp_in_saddr = Unix.(match my_ipaddr, (getsockname tcp_in_sock) with
-      | Some ip, ADDR_INET (a, p) -> ADDR_INET (ip, p)
-      | None, _ -> failwith (Printf.sprintf "Interface %s either do not exist or does not have an associated IPv6 address" iface)
-      | _ -> raise (Invalid_argument "tcp_in_saddr")) in
+  let tcp_in_saddr = match Unix.getsockname tcp_in_sock with
+    | Unix.ADDR_INET (a, p) -> Unix.ADDR_INET (Ipaddr_unix.to_inet_addr my_ipaddr, p)
+    | _ -> assert false in
+  let tcp_port = port_of_saddr tcp_in_saddr in
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
   let h =
@@ -159,11 +174,14 @@ let connect
     }
   in
 
-  Lwt_log.ign_debug_f ~section "Bound TCP port %d" (port_of_saddr tcp_in_saddr);
+  Lwt_log.ign_debug_f ~section "Bound TCP port %d" tcp_port;
 
-  let idmsg = String.create 5 in
-  EndianString.BigEndian.set_int16 idmsg 1 (port_of_saddr tcp_in_saddr);
-  EndianString.BigEndian.set_int16 idmsg 3 (String.length idmsg - hdr_size);
+  let idmsg = String.make hdr_size '\000'in
+  (match my_ipaddr with
+  | Ipaddr.V4 addr -> Ipaddr.V4.to_bytes_raw addr idmsg 14
+  | Ipaddr.V6 addr -> Ipaddr.V6.to_bytes_raw addr idmsg 2);
+  EndianString.BigEndian.set_int16 idmsg 18 tcp_port;
+  EndianString.BigEndian.set_int32 idmsg 20 0l;
 
   (* ping group every ival seconds *)
   let ping ival =
@@ -173,7 +191,7 @@ let connect
           if ttl > 0 then SaddrMap.add k (pred ttl, ign) a
           else a
         ) h.peers SaddrMap.empty;
-      idmsg.[0] <- int_of_typ PING |> Char.chr;
+      EndianString.BigEndian.set_int16 idmsg 0 (int_of_typ PING);
       Lwt_unix.sendto group_sock idmsg 0 (String.length idmsg) [] h.group_saddr >>= fun (_:int) ->
       Lwt_unix.sleep ival >>= fun () -> inner (succ n)
     in inner 0
@@ -181,9 +199,9 @@ let connect
 
   (* Base reactor to react to protocol messages *)
   let base_reactor saddr buf =
-    match typ_of_int (Char.code buf.[0]) with
+    match typ_of_int (EndianString.BigEndian.get_int16 buf 0) with
     | PING ->
-      Lwt_log.ign_info ~section "Received PING";
+      Lwt_log.ign_info_f ~section "Received PING from %s" (string_of_saddr saddr);
       (try
         let ttl, ign = SaddrMap.find saddr h.peers in
         h.peers <- SaddrMap.add saddr (init_ttl, ign) h.peers
@@ -195,11 +213,26 @@ let connect
       Lwt.return_unit
   in
 
-  let process h saddr buf =
-    let remote_port = EndianString.BigEndian.get_uint16 buf 1 in
-    let saddr = saddr_with_port saddr remote_port in
+  let saddr_of_msg buf =
+    let port = EndianString.BigEndian.get_int16 buf 18 in
+    (* Correct endianness: weird issue I have just got with
+       ocplib-endian. *)
+    let port = if port < 0 then port + 65536 else port in
+    let ipver = if buf.[3] = '\000' then `V4 else `V6 in
+    if ipver = `V4
+    then
+      let ipv4 = Ipaddr.V4.of_bytes_raw buf 14 in
+      Unix.ADDR_INET (Ipaddr_unix.V4.to_inet_addr ipv4, port)
+    else
+      let ipv6 = Ipaddr.V6.of_bytes_raw buf 2 in
+      Unix.ADDR_INET (Ipaddr_unix.V6.to_inet_addr ipv6, port)
+
+  in
+
+  let process h buf =
+    let saddr = saddr_of_msg buf in
     match buf.[0], peer_ignored h saddr with
-    | c,  _ when c < '\100' -> (* control msg *)
+    | c,  _ when c = '\000' -> (* control msg: [0; 255] *)
       (
         Lwt_log.ign_debug ~section "Receiving a control msg";
         Lwt.async (fun () -> base_reactor saddr buf)
@@ -212,7 +245,7 @@ let connect
     | _ -> ()
   in
 
-  (* react to incoming messages *)
+  (* react to incoming messages on the multicast network *)
   let react sock process =
     let hdrbuf = String.create hdr_size in
     let rec inner () =
@@ -225,9 +258,10 @@ let connect
           inner ()
         )
       else
-        let msglen = hdr_size + EndianString.BigEndian.get_uint16 hdrbuf 3 in
+        let msglen = hdr_size + (EndianString.BigEndian.get_int32 hdrbuf 20
+                                 |> Int32.to_int) in
         let buf = String.create msglen in
-        Lwt_unix.recvfrom group_sock buf 0 msglen [] >>= fun (nbread, saddr) ->
+        Lwt_unix.recvfrom group_sock buf 0 msglen [] >>= fun (nbread, _) ->
         if nbread <> msglen
         then
           (
@@ -237,7 +271,7 @@ let connect
           )
         else
           (
-            process h saddr buf;
+            process h buf;
             inner ()
           )
     in inner ()
@@ -285,4 +319,5 @@ let neighbours h =
          else a
       )
       h.peers [] in
+  assert (peers_rev_list <> []);
   Lwt.return (List.rev peers_rev_list)
