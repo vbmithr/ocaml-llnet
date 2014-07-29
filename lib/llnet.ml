@@ -169,7 +169,7 @@ let connect
       group_saddr = saddr_of_addr_port group_addr port;
       tcp_in_sock;
       tcp_in_saddr;
-      peers = SaddrMap.singleton tcp_in_saddr (init_ttl, false);
+      peers = SaddrMap.singleton tcp_in_saddr (max_int, false);
       not_alone = Lwt_condition.create ()
     }
   in
@@ -186,10 +186,13 @@ let connect
   (* ping group every ival seconds *)
   let ping ival =
     let rec inner n =
-      (* Decrease TTL of all members and remove the expired ones *)
+      (* Decrease TTL of all members (except oneself) and remove the
+         expired ones *)
       h.peers <- SaddrMap.fold (fun k (ttl, ign) a ->
-          if ttl > 0 then SaddrMap.add k (pred ttl, ign) a
-          else a
+          match k, ttl with
+          | k, _ when k = tcp_in_saddr -> SaddrMap.add k (max_int, false) a
+          | k, ttl when ttl > 0 -> SaddrMap.add k (pred ttl, ign) a
+          | _ -> a
         ) h.peers SaddrMap.empty;
       EndianString.BigEndian.set_int16 idmsg 0 (int_of_typ PING);
       Lwt_unix.sendto group_sock idmsg 0 (String.length idmsg) [] h.group_saddr >>= fun (_:int) ->
@@ -202,12 +205,13 @@ let connect
     match typ_of_int (EndianString.BigEndian.get_int16 buf 0) with
     | PING ->
       Lwt_log.ign_info_f ~section "Received PING from %s" (string_of_saddr saddr);
-      (try
-        let ttl, ign = SaddrMap.find saddr h.peers in
-        h.peers <- SaddrMap.add saddr (init_ttl, ign) h.peers
-      with Not_found ->
-        h.peers <- SaddrMap.add saddr (init_ttl, false) h.peers
-      );
+      if saddr <> tcp_in_saddr then
+        (try
+           let ttl, ign = SaddrMap.find saddr h.peers in
+           h.peers <- SaddrMap.add saddr (init_ttl, ign) h.peers
+         with Not_found ->
+           h.peers <- SaddrMap.add saddr (init_ttl, false) h.peers
+        );
       if valid_cardinal h.peers = 2 (* We just detected a first peer *)
       then Lwt_condition.broadcast h.not_alone true;
       Lwt.return_unit
