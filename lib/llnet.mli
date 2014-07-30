@@ -16,6 +16,7 @@ type id = string
 (** Type of peer identifiers. *)
 
 type t = {
+  ival: float; (* Period between PINGs *)
   group_sock: Lwt_unix.file_descr; (* UDP socket bound to a multicast sockaddr. *)
   group_saddr: Unix.sockaddr; (* multicast group sockaddr. *)
   tcp_in_sock: Lwt_unix.file_descr; (* TCP socket for incoming connection. *)
@@ -47,13 +48,16 @@ val connect :
 val order : t -> int
 (** [order c] is the order of oneself in the list of peers *)
 
+val neighbours_nonblock : t -> Unix.sockaddr list
+(** [neighbours_nonblock c] is the list of neighbours (not oneself)
+    that are not ignored, in sockaddr order. *)
+
 val neighbours : t -> Unix.sockaddr list Lwt.t
 (** [neighbours c] is a thread that returns the list of neighbours
     (not oneself) that are not ignored, in sockaddr order, whenever
     there is at least one other peer in the network.
 
-    Invariant: never returns []
-*)
+    Invariant: never returns [] *)
 
 val ignore_peer : t -> Unix.sockaddr -> unit
 (** [ignore_peer c peer] do not forward user messages from peer [peer]

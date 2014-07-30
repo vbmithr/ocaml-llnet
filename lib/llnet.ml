@@ -72,6 +72,7 @@ module SaddrSet = Set.Make(OrderedSockaddr)
 type id = string
 
 type t = {
+  ival: float;
   group_sock: Lwt_unix.file_descr;
   group_saddr: Unix.sockaddr;
   tcp_in_sock: Lwt_unix.file_descr;
@@ -165,7 +166,8 @@ let connect
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
   let h =
-    { group_sock;
+    { ival;
+      group_sock;
       group_saddr = saddr_of_addr_port group_addr port;
       tcp_in_sock;
       tcp_in_saddr;
@@ -310,11 +312,7 @@ let order h =
   in
   List.find (fun (k, _) -> h.tcp_in_saddr = k) indexed_list |> snd
 
-let neighbours h =
-  (if valid_cardinal h.peers < 2
-  then Lwt_condition.wait h.not_alone
-  else Lwt.return true)
-  >>= fun _ ->
+let neighbours_nonblock h =
   let peers_rev_list =
     SaddrMap.fold
       (fun saddr (ttl, ignored) a ->
@@ -323,5 +321,10 @@ let neighbours h =
          else a
       )
       h.peers [] in
-  assert (peers_rev_list <> []);
-  Lwt.return (List.rev peers_rev_list)
+  List.rev peers_rev_list
+
+let neighbours h =
+  (if valid_cardinal h.peers < 2
+  then Lwt_condition.wait h.not_alone
+  else Lwt.return true)
+  >>= fun _ -> neighbours_nonblock h |> Lwt.return
