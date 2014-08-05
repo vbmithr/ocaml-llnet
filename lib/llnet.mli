@@ -15,14 +15,15 @@ module SaddrMap : Map.S with type key = Unix.sockaddr
 type id = string
 (** Type of peer identifiers. *)
 
-type t = {
+type 'a t = {
   ival: float; (* Period between PINGs *)
   group_sock: Lwt_unix.file_descr; (* UDP socket bound to a multicast sockaddr. *)
   group_saddr: Unix.sockaddr; (* multicast group sockaddr. *)
   tcp_in_sock: Lwt_unix.file_descr; (* TCP socket for incoming connection. *)
   tcp_in_saddr: Unix.sockaddr; (* sockaddr of the incoming TCP socket. *)
   mutable peers: (int * bool) SaddrMap.t; (* Map of saddr -> TTL * ignored *)
-  not_alone: bool Lwt_condition.t (* Notification when a first peer is detected *)
+  not_alone: bool Lwt_condition.t; (* Notification when a first peer is detected *)
+  mutable user_data: 'a option (* Can contain custom data needed *)
 }
 (** Handler to a connection to a multicast network. *)
 
@@ -33,10 +34,11 @@ val connect :
   ?ival:float ->
   ?udp_wait:unit Lwt.t ->
   ?tcp_wait:unit Lwt.t ->
-  ?group_reactor:(t -> Unix.sockaddr -> string -> unit Lwt.t) ->
-  ?tcp_reactor:(t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
+  ?group_reactor:('a t -> Unix.sockaddr -> string -> unit Lwt.t) ->
+  ?tcp_reactor:('a t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
+  ?user_data:'a ->
   iface:string ->
-  Ipaddr.t -> int -> t Lwt.t
+  Ipaddr.t -> int -> 'a t Lwt.t
 (** [connect ?ival ?udp_wait ?tcp_wait ?group_reactor ?tcp_reactor
     ~iface addr port] returns an handler to the multicast network
     [addr:port], where [addr:port] is a multicast sockaddr,
@@ -45,23 +47,23 @@ val connect :
     resp. the private unicast TCP socket. Neighbours are discovered
     every [ival] seconds (default 1s). *)
 
-val order : t -> int
+val order : 'a t -> int
 (** [order c] is the order of oneself in the list of peers *)
 
-val neighbours_nonblock : t -> Unix.sockaddr list
+val neighbours_nonblock : 'a t -> Unix.sockaddr list
 (** [neighbours_nonblock c] is the list of neighbours (not oneself)
     that are not ignored, in sockaddr order. *)
 
-val neighbours : t -> Unix.sockaddr list Lwt.t
+val neighbours : 'a t -> Unix.sockaddr list Lwt.t
 (** [neighbours c] is a thread that returns the list of neighbours
     (not oneself) that are not ignored, in sockaddr order, whenever
     there is at least one other peer in the network.
 
     Invariant: never returns [] *)
 
-val ignore_peer : t -> Unix.sockaddr -> unit
+val ignore_peer : 'a t -> Unix.sockaddr -> unit
 (** [ignore_peer c peer] do not forward user messages from peer [peer]
     to the application anymore. *)
 
-val peer_ignored : t -> Unix.sockaddr -> bool
+val peer_ignored : 'a t -> Unix.sockaddr -> bool
 (** [peer_ignored c p] is [true] if [p] is ignored. *)

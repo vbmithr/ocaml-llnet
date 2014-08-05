@@ -71,14 +71,15 @@ module SaddrSet = Set.Make(OrderedSockaddr)
 
 type id = string
 
-type t = {
+type 'a t = {
   ival: float;
   group_sock: Lwt_unix.file_descr;
   group_saddr: Unix.sockaddr;
   tcp_in_sock: Lwt_unix.file_descr;
   tcp_in_saddr: Unix.sockaddr;
   mutable peers: (int * bool) SaddrMap.t;
-  not_alone: bool Lwt_condition.t
+  not_alone: bool Lwt_condition.t;
+  mutable user_data: 'a option
 }
 
 type typ =
@@ -104,6 +105,7 @@ let connect
     ?(tcp_wait=Lwt.return_unit)
     ?(group_reactor=(fun _ _ _ -> Lwt.return_unit))
     ?(tcp_reactor=(fun _ fd _ -> Lwt_unix.close fd >>= fun () -> Lwt.return_unit))
+    ?user_data
     ~iface group_addr port =
 
   (* Find a valid IP address to bind the TCP sock to. If IPv6 is used,
@@ -172,7 +174,8 @@ let connect
       tcp_in_sock;
       tcp_in_saddr;
       peers = SaddrMap.singleton tcp_in_saddr (max_int, false);
-      not_alone = Lwt_condition.create ()
+      not_alone = Lwt_condition.create ();
+      user_data
     }
   in
 
