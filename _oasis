@@ -15,7 +15,7 @@ Flag irmin
 Library llnet
   Path: lib
   Modules: Llnet
-  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, cryptokit, tuntap
+  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, tuntap
   CompiledObject: best
   ByteOpt: -bin-annot
   NativeOpt: -bin-annot
