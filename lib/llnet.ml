@@ -106,7 +106,12 @@ let connect
     ?(group_reactor=(fun _ _ _ -> Lwt.return_unit))
     ?(tcp_reactor=(fun _ fd _ -> Lwt_unix.close fd >>= fun () -> Lwt.return_unit))
     ?user_data
-    ~iface group_addr port =
+    ~iface saddr =
+
+  let group_addr, port = match saddr with
+    | Unix.ADDR_UNIX _ -> raise (Invalid_argument "UNIX sockets not supported")
+    | Unix.ADDR_INET (a, p) -> Ipaddr_unix.of_inet_addr a, p
+  in
 
   (* Find a valid IP address to bind the TCP sock to. If IPv6 is used,
      a global IPv6 address must be assigned. If IPv4 is used, an IPv4

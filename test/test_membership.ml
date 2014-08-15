@@ -11,7 +11,7 @@ module Lwt_unix = struct
     | _ -> close s
 end
 
-let main iface (addr:Ipaddr.t) port =
+let main iface group_saddr =
   let group_reactor _ _ _ = Lwt.return_unit in
   let tcp_reactor h fd remote_saddr =
     (* Returns a serialized list of our IP addresses at the selected
@@ -34,27 +34,27 @@ let main iface (addr:Ipaddr.t) port =
   let peers_ipv4addr = Hashtbl.create 13 in
   let ipv4buf = String.create 4 in
   let obtain_ipv4addr_from_peers saddr =
-      let ss = Unix.(socket (domain_of_sockaddr saddr) SOCK_STREAM 0) in
-      let s = Lwt_unix.of_unix_file_descr ss in
+      let s = Unix.(socket (domain_of_sockaddr saddr) SOCK_STREAM 0) in
+      let lwt_s = Lwt_unix.of_unix_file_descr s in
       try_lwt
-        Sockopt.connect ~iface ss saddr;
+        Sockopt.connect ~iface s saddr;
         let rec read_one_addr () =
-          Lwt_unix.read s ipv4buf 0 4 >>= function
+          Lwt_unix.read lwt_s ipv4buf 0 4 >>= function
           | 4 ->
             Hashtbl.replace peers_ipv4addr saddr (Ipaddr.V4.of_bytes_exn ipv4buf);
-            Lwt_log.debug_f "Read one IPv4 from %s" (Ipaddr.to_string addr) >>= fun () ->
+            Lwt_log.debug_f "Read one IPv4 from %s" (string_of_saddr saddr) >>= fun () ->
             read_one_addr ()
           | n -> (* done, or error *)
             Lwt_log.debug_f "Lwt_unix.read returned %d" n
         in
         read_one_addr ()
       with
-      | Unix.Unix_error (Unix.ECONNREFUSED,_,_) -> Lwt_unix.safe_close s
+      | Unix.Unix_error (Unix.ECONNREFUSED,_,_) -> Lwt_unix.safe_close lwt_s
       finally
-        Lwt_unix.safe_close s
+        Lwt_unix.safe_close lwt_s
 
   in
-  Llnet.connect ~group_reactor ~tcp_reactor ~iface (addr:Ipaddr.t) port  >>= fun h ->
+  Llnet.connect ~group_reactor ~tcp_reactor ~iface group_saddr  >>= fun h ->
   let rec inner () =
     Lwt_unix.sleep 1. >>= fun () ->
     Printf.printf "I am peer number %d and my group is:\n%!" (order h);
@@ -76,9 +76,9 @@ let () =
   let group_addr = ref "ff02::dead:beaf" in
   let group_port = ref 5555 in
   let speclist = Arg.(align [
-      "--iface", Set_string iface, "<string> Interface to use (default: eth0)";
-      "--addr", Set_string group_addr, "<string> Multicast group address to use (default: ff02::dead:beef)";
-      "--port", Set_int group_port, "<int> Group port to use (default: 5555)";
+      "-iface", Set_string iface, "<string> Interface to use (default: eth0)";
+      "-addr", Set_string group_addr, "<string> Multicast group address to use (default: ff02::dead:beef)";
+      "-port", Set_int group_port, "<int> Group port to use (default: 5555)";
       "-v", Unit (fun () -> Lwt_log.(add_rule "*" Info)), " Be verbose";
       "-vv", Unit (fun () -> Lwt_log.(add_rule "*" Debug)), " Be more verbose"
     ]) in
@@ -86,4 +86,5 @@ let () =
   let usage_msg = "Usage: " ^ Sys.argv.(0) ^ " <options>\nOptions are:" in
   Arg.parse speclist anon_fun usage_msg;
 
-  Lwt_main.run (main !iface (Ipaddr.of_string_exn !group_addr) !group_port)
+  let group_saddr = Unix.(ADDR_INET (inet_addr_of_string !group_addr, !group_port)) in
+  Lwt_main.run (main !iface group_saddr)

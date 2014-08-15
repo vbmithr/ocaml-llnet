@@ -38,7 +38,7 @@ val connect :
   ?tcp_reactor:('a t -> Lwt_unix.file_descr -> Lwt_unix.sockaddr -> unit Lwt.t) ->
   ?user_data:'a ->
   iface:string ->
-  Ipaddr.t -> int -> 'a t Lwt.t
+  Unix.sockaddr -> 'a t Lwt.t
 (** [connect ?ival ?udp_wait ?tcp_wait ?group_reactor ?tcp_reactor
     ~iface addr port] returns an handler to the multicast network
     [addr:port], where [addr:port] is a multicast sockaddr,
