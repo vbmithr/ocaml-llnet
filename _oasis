@@ -15,7 +15,7 @@ Flag irmin
 Library llnet
   Path: lib
   Modules: Llnet
-  BuildDepends: ipaddr.unix, lwt.unix, ocplib-endian, sockopt, tuntap
+  BuildDepends: ipaddr.unix, lwt.unix, lwt.syntax, ocplib-endian, sockopt, tuntap, tls.lwt
   CompiledObject: best
   ByteOpt: -bin-annot
   NativeOpt: -bin-annot
@@ -33,7 +33,7 @@ Library irmindistributed
 Executable test_membership
   Path: test
   MainIs: test_membership.ml
-  BuildDepends: llnet, lwt.syntax
+  BuildDepends: llnet, lwt.syntax, ocplib-endian.bigstring
   CompiledObject: best
   Install: false
   ByteOpt: -bin-annot

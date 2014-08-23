@@ -746,7 +746,8 @@ let () =
     (function hook ->
       dispatch_default hook ;
       match hook with
-        | After_rules ->
-          flag ["ocaml";"compile";"lwtbacktrace"] (S [A"-ppopt"; A"-lwt-debug"]);
-        | _ -> ()
+      | After_rules ->
+        flag ["ocaml";"compile";"lwtbacktrace"] (S [A"-ppopt"; A"-lwt-debug"]);
+        flag ["ocaml";"link";"lwtbacktrace"] (S [A"-ppopt"; A"-lwt-debug"]);
+      | _ -> ()
     )
