@@ -16,14 +16,14 @@ type id = string
 (** Type of peer identifiers. *)
 
 type 'a t = {
-  ival: float; (* Period between PINGs *)
-  group_sock: Lwt_unix.file_descr; (* UDP socket bound to a multicast sockaddr. *)
-  group_saddr: Unix.sockaddr; (* multicast group sockaddr. *)
-  tcp_in_sock: Lwt_unix.file_descr; (* TCP socket for incoming connection. *)
-  tcp_in_saddr: Unix.sockaddr; (* sockaddr of the incoming TCP socket. *)
-  mutable peers: (int * bool) SaddrMap.t; (* Map of saddr -> TTL * ignored *)
-  not_alone: bool Lwt_condition.t; (* Notification when a first peer is detected *)
-  mutable user_data: 'a option (* Can contain custom data needed *)
+  ival: float;                            (* Period between PINGs                       *)
+  group_sock: Lwt_unix.file_descr;        (* UDP socket bound to a multicast sockaddr.  *)
+  group_saddr: Unix.sockaddr;             (* multicast group sockaddr.                  *)
+  tcp_in_sock: Lwt_unix.file_descr;       (* TCP socket for incoming connection.        *)
+  tcp_in_saddr: Unix.sockaddr;            (* sockaddr of the incoming TCP socket.       *)
+  mutable peers: (int * bool) SaddrMap.t; (* Map of saddr -> TTL * ignored              *)
+  not_alone: bool Lwt_condition.t;        (* Notification when a first peer is detected *)
+  mutable user_data: 'a option;           (* Can contain custom data needed             *)
 }
 (** Handler to a connection to a multicast network. *)
 

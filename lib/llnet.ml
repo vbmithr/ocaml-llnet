@@ -79,7 +79,7 @@ type 'a t = {
   tcp_in_saddr: Unix.sockaddr;
   mutable peers: (int * bool) SaddrMap.t;
   not_alone: bool Lwt_condition.t;
-  mutable user_data: 'a option
+  mutable user_data: 'a option;
 }
 
 type typ =
