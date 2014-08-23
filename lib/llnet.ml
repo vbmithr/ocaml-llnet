@@ -79,6 +79,7 @@ type 'a t = {
   tcp_in_saddr: Unix.sockaddr;
   mutable peers: (int * bool) SaddrMap.t;
   not_alone: bool Lwt_condition.t;
+  clock: unit Lwt_condition.t;
   mutable user_data: 'a option;
 }
 
@@ -100,6 +101,7 @@ let valid_cardinal peers =
   SaddrMap.fold (fun saddr (ttl, ign) a -> if ign || ttl <= 0 then a else succ a) peers 0
 
 let connect
+    ?(port=0)
     ?(ival=1.)
     ?(udp_wait=Lwt.return_unit)
     ?(tcp_wait=Lwt.return_unit)
@@ -156,13 +158,13 @@ let connect
           match group_addr with
           | Ipaddr.V6 group_addr ->
             Sockopt.bind6 ~iface group_sock group_addr port;
-            Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified 0;
+            Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified port;
           | _ -> assert false
         )
       else
         (
           Unix.(bind group_sock (ADDR_INET (Ipaddr_unix.to_inet_addr group_addr, port)));
-          Unix.(bind tcp_in_sock (ADDR_INET(inet_addr_any, 0)))
+          Unix.(bind tcp_in_sock (ADDR_INET(inet_addr_any, port)))
         ));
       Unix.listen tcp_in_sock 5;
       ) ();
@@ -180,6 +182,7 @@ let connect
       tcp_in_saddr;
       peers = SaddrMap.singleton tcp_in_saddr (max_int, false);
       not_alone = Lwt_condition.create ();
+      clock = Lwt_condition.create ();
       user_data
     }
   in
@@ -215,6 +218,7 @@ let connect
     match typ_of_int (EndianString.BigEndian.get_int16 buf 0) with
     | PING ->
       Lwt_log.ign_info_f ~section "Received PING from %s" (string_of_saddr saddr);
+      Lwt_condition.broadcast h.clock ();
       if saddr <> tcp_in_saddr then
         (try
            let ttl, ign = SaddrMap.find saddr h.peers in

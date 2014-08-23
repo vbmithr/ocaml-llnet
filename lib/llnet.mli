@@ -23,6 +23,7 @@ type 'a t = {
   tcp_in_saddr: Unix.sockaddr;            (* sockaddr of the incoming TCP socket.       *)
   mutable peers: (int * bool) SaddrMap.t; (* Map of saddr -> TTL * ignored              *)
   not_alone: bool Lwt_condition.t;        (* Notification when a first peer is detected *)
+  clock: unit Lwt_condition.t;            (* Signalled when receiving a PING            *)
   mutable user_data: 'a option;           (* Can contain custom data needed             *)
 }
 (** Handler to a connection to a multicast network. *)
@@ -31,6 +32,7 @@ val hdr_size : int
 (** Size of the header of protocol messages. *)
 
 val connect :
+  ?port:int ->
   ?ival:float ->
   ?udp_wait:unit Lwt.t ->
   ?tcp_wait:unit Lwt.t ->
@@ -40,8 +42,8 @@ val connect :
   iface:string ->
   Unix.sockaddr -> 'a t Lwt.t
 (** [connect ?ival ?udp_wait ?tcp_wait ?group_reactor ?tcp_reactor
-    ~iface addr port] returns an handler to the multicast network
-    [addr:port], where [addr:port] is a multicast sockaddr,
+    ~iface mcast_saddr] returns an handler to the multicast network
+    [mcast_saddr], where [mcast_saddr] is a multicast sockaddr,
     [group_reactor] and [my_reactor] are callbacks that will be
     triggered upon receiving a message on the UDP multicast socket,
     resp. the private unicast TCP socket. Neighbours are discovered
