@@ -108,78 +108,63 @@ let connect
     ?(group_reactor=(fun _ _ _ -> Lwt.return_unit))
     ?(tcp_reactor=(fun _ fd _ -> Lwt_unix.close fd >>= fun () -> Lwt.return_unit))
     ?user_data
-    ~iface saddr =
+    ~iface group_saddr =
 
-  let group_addr, group_port = match saddr with
+  let group_addr, group_port = match group_saddr with
     | Unix.ADDR_UNIX _ -> raise (Invalid_argument "UNIX sockets not supported")
-    | Unix.ADDR_INET (a, p) -> Ipaddr_unix.of_inet_addr a, p
-  in
+    | Unix.ADDR_INET (a, p) -> a, p in
 
-  (* Find a valid IP address to bind the TCP sock to. If IPv6 is used,
-     a global IPv6 address must be assigned. If IPv4 is used, an IPv4
-     address must be assigned *)
-
-  let ipver = match group_addr with
-  | Ipaddr.V6 group_addr -> `V6
-  | Ipaddr.V4 group_addr -> `V4 in
+  (* Find a valid IP address to bind the TCP sock to. Prefer IPv6 over
+     IPv4. *)
 
   let my_ipaddr =
     let open Tuntap in
-    List.fold_left
-      (fun a { name; ipaddr } -> match name, ipaddr with
-         | name, AF_INET6 (addr, _) when Ipaddr.(V6.is_global addr)
-                                      && name = iface && ipver = `V6 ->
-           Some (Ipaddr.V6 addr)
-         | name, AF_INET (addr, _) when  name = iface && ipver = `V4 ->
-           Some (Ipaddr.V4 addr)
-         | _ -> a
-      ) None (Tuntap.getifaddrs ())
-    |> function
-    | Some ipaddr -> ipaddr
-    | None ->
-      raise (Failure
-               (Printf.sprintf
-                  "Interface %s has no usable IP address associated" iface))
+    let ifaddrs = List.filter
+        (fun { name; ipaddr } -> name = iface) (Tuntap.getifaddrs ()) in
+    let ifaddrs = List.fast_sort (fun a b -> match a, b with
+        | {name=_; ipaddr=AF_INET _}, {name=_; ipaddr=AF_INET6 _} -> -1
+        | {name=_; ipaddr=AF_INET6 _}, {name=_; ipaddr=AF_INET _} -> 1
+        | _ -> 0) ifaddrs in
+    match ifaddrs with
+    | [] ->
+        failwith
+          (Printf.sprintf "Interface %s has no usable IP address associated" iface)
+    | {name; ipaddr}::_ ->
+        (match ipaddr with
+         | Tuntap.AF_INET (ip, _) -> Ipaddr_unix.V4.to_inet_addr ip
+         | Tuntap.AF_INET6 (ip, _) -> Ipaddr_unix.V6.to_inet_addr ip
+        )
   in
 
   (* Join multicast group and bind socket to the group address. *)
 
-  let group_sock =
-    Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_DGRAM 0) in
-  let tcp_in_sock =
-    Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_STREAM 0) in
+  let group_sock = Unix.(socket (domain_of_sockaddr group_saddr) SOCK_DGRAM 0) in
+  let tcp_in_sock = Unix.(socket PF_INET6 SOCK_STREAM 0) in
 
   Unix.(setsockopt group_sock SO_REUSEADDR true);
   Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
+
+  Sockopt.bind ~iface group_sock group_saddr;
   Sockopt.membership ~iface group_sock group_addr `Join;
-  (if ipver = `V6 then
-     (
-       match group_addr with
-       | Ipaddr.V6 group_addr ->
-         Sockopt.bind6 ~iface group_sock group_addr group_port;
-         Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified tcp_port;
-       | _ -> assert false
-     )
-   else
-     (
-       Unix.(bind group_sock (ADDR_INET (Ipaddr_unix.to_inet_addr group_addr, group_port)));
-       Unix.(bind tcp_in_sock (ADDR_INET(inet_addr_any, tcp_port)))
-     ));
+
+  Unix.(bind tcp_in_sock (ADDR_INET(inet6_addr_any, tcp_port)));
+
   Unix.listen tcp_in_sock 5;
 
-  let tcp_in_saddr = match Unix.getsockname tcp_in_sock with
-    | Unix.ADDR_INET (a, p) -> Unix.ADDR_INET (Ipaddr_unix.to_inet_addr my_ipaddr, p)
+  (* substitute inet6_addr_any with the real IP and maybe 0 with the
+     real port *)
+  let tcp_in_saddr, tcp_port = match Unix.getsockname tcp_in_sock with
+    | Unix.ADDR_INET (a, p) -> Unix.ADDR_INET (my_ipaddr, p), p
     | _ -> assert false in
 
-  (* We get the effective tcp_port, because tcp_port can be
-     automatically determined if at this point, tcp_port was set to 0. *)
-  let tcp_port = port_of_saddr tcp_in_saddr in
+  (* Obtain Lwt_unix.file_descr from Unix.file_descr *)
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
+
   let h =
     { ival;
       group_sock;
-      group_saddr = saddr_of_addr_port group_addr group_port;
+      group_saddr;
       tcp_in_sock;
       tcp_in_saddr;
       peers = SaddrMap.singleton tcp_in_saddr (max_int, false);
@@ -192,7 +177,7 @@ let connect
   Lwt_log.ign_debug_f ~section "Bound TCP port %d" tcp_port;
 
   let idmsg = String.make hdr_size '\000'in
-  (match my_ipaddr with
+  (match Ipaddr_unix.of_inet_addr my_ipaddr with
   | Ipaddr.V4 addr -> Ipaddr.V4.to_bytes_raw addr idmsg 14
   | Ipaddr.V6 addr -> Ipaddr.V6.to_bytes_raw addr idmsg 2);
   EndianString.BigEndian.set_int16 idmsg 18 tcp_port;
