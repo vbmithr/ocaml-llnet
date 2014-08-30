@@ -101,7 +101,7 @@ let valid_cardinal peers =
   SaddrMap.fold (fun saddr (ttl, ign) a -> if ign || ttl <= 0 then a else succ a) peers 0
 
 let connect
-    ?(port=0)
+    ?(tcp_port=0)
     ?(ival=1.)
     ?(udp_wait=Lwt.return_unit)
     ?(tcp_wait=Lwt.return_unit)
@@ -110,7 +110,7 @@ let connect
     ?user_data
     ~iface saddr =
 
-  let group_addr, port = match saddr with
+  let group_addr, group_port = match saddr with
     | Unix.ADDR_UNIX _ -> raise (Invalid_argument "UNIX sockets not supported")
     | Unix.ADDR_INET (a, p) -> Ipaddr_unix.of_inet_addr a, p
   in
@@ -149,35 +149,37 @@ let connect
   let tcp_in_sock =
     Unix.(socket (if ipver = `V6 then PF_INET6 else PF_INET) SOCK_STREAM 0) in
 
-  Unix.handle_unix_error (fun () ->
-      Unix.(setsockopt group_sock SO_REUSEADDR true);
-      Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
-      Sockopt.membership ~iface group_sock group_addr `Join;
-      (if ipver = `V6 then
-        (
-          match group_addr with
-          | Ipaddr.V6 group_addr ->
-            Sockopt.bind6 ~iface group_sock group_addr port;
-            Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified port;
-          | _ -> assert false
-        )
-      else
-        (
-          Unix.(bind group_sock (ADDR_INET (Ipaddr_unix.to_inet_addr group_addr, port)));
-          Unix.(bind tcp_in_sock (ADDR_INET(inet_addr_any, port)))
-        ));
-      Unix.listen tcp_in_sock 5;
-      ) ();
+  Unix.(setsockopt group_sock SO_REUSEADDR true);
+  Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
+  Sockopt.membership ~iface group_sock group_addr `Join;
+  (if ipver = `V6 then
+     (
+       match group_addr with
+       | Ipaddr.V6 group_addr ->
+         Sockopt.bind6 ~iface group_sock group_addr group_port;
+         Sockopt.bind6 tcp_in_sock Ipaddr.V6.unspecified tcp_port;
+       | _ -> assert false
+     )
+   else
+     (
+       Unix.(bind group_sock (ADDR_INET (Ipaddr_unix.to_inet_addr group_addr, group_port)));
+       Unix.(bind tcp_in_sock (ADDR_INET(inet_addr_any, tcp_port)))
+     ));
+  Unix.listen tcp_in_sock 5;
+
   let tcp_in_saddr = match Unix.getsockname tcp_in_sock with
     | Unix.ADDR_INET (a, p) -> Unix.ADDR_INET (Ipaddr_unix.to_inet_addr my_ipaddr, p)
     | _ -> assert false in
+
+  (* We get the effective tcp_port, because tcp_port can be
+     automatically determined if at this point, tcp_port was set to 0. *)
   let tcp_port = port_of_saddr tcp_in_saddr in
   let group_sock = Lwt_unix.of_unix_file_descr group_sock in
   let tcp_in_sock = Lwt_unix.of_unix_file_descr tcp_in_sock in
   let h =
     { ival;
       group_sock;
-      group_saddr = saddr_of_addr_port group_addr port;
+      group_saddr = saddr_of_addr_port group_addr group_port;
       tcp_in_sock;
       tcp_in_saddr;
       peers = SaddrMap.singleton tcp_in_saddr (max_int, false);

@@ -147,7 +147,7 @@ let main tls iface tcp_port group_saddr =
   in
   let getipv4addr = make_getipv4addr () in
 
-  Llnet.connect ~port:tcp_port ~group_reactor ~tcp_reactor ~iface group_saddr  >>= fun h ->
+  Llnet.connect ~tcp_port ~group_reactor ~tcp_reactor ~iface group_saddr  >>= fun h ->
   let rec inner () =
     Lwt_condition.wait h.clock >>= fun () ->
     Printf.printf "I am peer number %d and my group is:\n%!" (order h);
@@ -180,7 +180,7 @@ let () =
       "-port", Set_int group_port,
       "<int> Group port to use (default: 5555)";
       "-tcp-port", Set_int tcp_port,
-      "<int> Port to bind the TCP server to";
+      "<int> Port to bind the TCP server to (default: automatic)";
       "-v", String (fun s -> Lwt_log.(add_rule s Info)),
       "<section> Put <section> to the verbose level";
       "-vv", String (fun s -> Lwt_log.(add_rule s Debug)),

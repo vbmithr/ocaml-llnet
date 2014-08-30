@@ -32,7 +32,7 @@ val hdr_size : int
 (** Size of the header of protocol messages. *)
 
 val connect :
-  ?port:int ->
+  ?tcp_port:int ->
   ?ival:float ->
   ?udp_wait:unit Lwt.t ->
   ?tcp_wait:unit Lwt.t ->
