@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: fa5312a2448dde2b2e23c617abb099e7) *)
+(* DO NOT EDIT (digest: 347472f2236d5c7b39e1966f5d39e045) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -595,148 +595,187 @@ end
 open Ocamlbuild_plugin;;
 let package_default =
   {
-     MyOCamlbuildBase.lib_ocaml =
-       [("llnet", ["lib"], []); ("irmindistributed", ["irmin"], [])];
+     MyOCamlbuildBase.lib_ocaml = [("llnet", ["lib"], [])];
      lib_c = [];
      flags =
        [
           (["oasis_library_llnet_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_library_llnet_native"; "ocaml"; "link"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_library_llnet_byte"; "ocaml"; "ocamldep"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_library_llnet_native"; "ocaml"; "ocamldep"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_library_llnet_byte"; "ocaml"; "compile"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_library_llnet_native"; "ocaml"; "compile"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_library_irmindistributed_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_library_irmindistributed_native";
-              "ocaml";
-              "link";
-              "native"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_library_irmindistributed_byte";
-              "ocaml";
-              "ocamldep";
-              "byte"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_library_irmindistributed_native";
-              "ocaml";
-              "ocamldep";
-              "native"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_library_irmindistributed_byte"; "ocaml"; "compile"; "byte"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_library_irmindistributed_native";
-              "ocaml";
-              "compile";
-              "native"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           (["oasis_executable_test_membership_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           ([
               "oasis_executable_test_membership_native";
               "ocaml";
               "link";
               "native"
            ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           ([
               "oasis_executable_test_membership_byte";
               "ocaml";
               "ocamldep";
               "byte"
            ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           ([
               "oasis_executable_test_membership_native";
               "ocaml";
               "ocamldep";
               "native"
            ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           ([
               "oasis_executable_test_membership_byte";
               "ocaml";
               "compile";
               "byte"
            ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ]);
           ([
               "oasis_executable_test_membership_native";
               "ocaml";
               "compile";
               "native"
            ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_native"; "ocaml"; "link"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_byte"; "ocaml"; "ocamldep"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_native"; "ocaml"; "ocamldep"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_byte"; "ocaml"; "compile"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_ao_native"; "ocaml"; "compile"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_irmin_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_irmin_native"; "ocaml"; "link"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_irmin_byte"; "ocaml"; "ocamldep"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_executable_test_irmin_native";
-              "ocaml";
-              "ocamldep";
-              "native"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_irmin_byte"; "ocaml"; "compile"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          ([
-              "oasis_executable_test_irmin_native";
-              "ocaml";
-              "compile";
-              "native"
-           ],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_byte"; "ocaml"; "link"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_native"; "ocaml"; "link"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_byte"; "ocaml"; "ocamldep"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_native"; "ocaml"; "ocamldep"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_byte"; "ocaml"; "compile"; "byte"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])]);
-          (["oasis_executable_test_rw_native"; "ocaml"; "compile"; "native"],
-            [(OASISExpr.EBool true, S [A "-bin-annot"])])
+            [
+               (OASISExpr.EBool true,
+                 S
+                   [
+                      A "-bin-annot";
+                      A "-w";
+                      A "+a-4-6-9-27..29-30-32..99";
+                      A "-warn-error";
+                      A "+a-4-6-9-18-27-28-29..99"
+                   ])
+            ])
        ];
-     includes =
-       [("test", ["lib"]); ("irmin_test", ["irmin"]); ("irmin", ["lib"])]
+     includes = [("test", ["lib"])]
   }
   ;;
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default package_default;;
 
-# 740 "myocamlbuild.ml"
+# 779 "myocamlbuild.ml"
 (* OASIS_STOP *)
 
 open Ocamlbuild_plugin

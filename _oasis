@@ -8,27 +8,13 @@ Plugins: META (0.4), DevFiles (0.4)
 BuildTools: ocamlbuild
 AlphaFeatures: compiled_setup_ml
 
-Flag irmin
-  Description: Build IrminDistributed.
-  Default: false
-
 Library llnet
   Path: lib
   Modules: Llnet
   BuildDepends: ipaddr.unix, lwt.unix, lwt.syntax, ocplib-endian, sockopt, tuntap, tls.lwt
   CompiledObject: best
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
-
-Library irmindistributed
-  Build$: flag(irmin)
-  Install$: flag (irmin)
-  Path: irmin
-  Modules: IrminDistributed
-  BuildDepends: irmin, llnet, lwt.syntax
-  CompiledObject: best
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
+  ByteOpt: -bin-annot -w +a-4-6-9-27..29-30-32..99 -warn-error +a-4-6-9-18-27-28-29..99
+  NativeOpt: -bin-annot -w +a-4-6-9-27..29-30-32..99 -warn-error +a-4-6-9-18-27-28-29..99
 
 Executable test_membership
   Path: test
@@ -36,35 +22,5 @@ Executable test_membership
   BuildDepends: llnet, lwt.syntax, ocplib-endian.bigstring
   CompiledObject: best
   Install: false
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
-
-Executable test_ao
-  Build$: flag(irmin)
-  Install: false
-  Path: irmin_test
-  MainIs: test_ao.ml
-  CompiledObject: best
-  BuildDepends: irmin.backend, irmindistributed
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
-
-Executable test_irmin
-  Build$: flag(irmin)
-  Install: false
-  Path: irmin_test
-  MainIs: test_irmin.ml
-  CompiledObject: best
-  BuildDepends: irmin.backend, irmin.unix, irmindistributed
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
-
-Executable test_rw
-  Build$: false
-  Install: false
-  Path: irmin_test
-  MainIs: test_rw.ml
-  CompiledObject: best
-  BuildDepends: irmin.backend, irmindistributed
-  ByteOpt: -bin-annot
-  NativeOpt: -bin-annot
+  ByteOpt: -bin-annot -w +a-4-6-9-27..29-30-32..99 -warn-error +a-4-6-9-18-27-28-29..99
+  NativeOpt: -bin-annot -w +a-4-6-9-27..29-30-32..99 -warn-error +a-4-6-9-18-27-28-29..99

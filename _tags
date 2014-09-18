@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: db8cccfafb390f499769d722bf5dc09a)
+# DO NOT EDIT (digest: 32130b16762cc55da0ee5f4f0ae3e58c)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -26,21 +26,6 @@
 <lib/*.ml{,i}>: pkg_sockopt
 <lib/*.ml{,i}>: pkg_tls.lwt
 <lib/*.ml{,i}>: pkg_tuntap
-# Library irmindistributed
-"irmin/irmindistributed.cmxs": use_irmindistributed
-<irmin/irmindistributed.{cma,cmxa}>: oasis_library_irmindistributed_byte
-<irmin/*.ml{,i}>: oasis_library_irmindistributed_byte
-<irmin/irmindistributed.{cma,cmxa}>: oasis_library_irmindistributed_native
-<irmin/*.ml{,i}>: oasis_library_irmindistributed_native
-<irmin/*.ml{,i}>: pkg_ipaddr.unix
-<irmin/*.ml{,i}>: pkg_irmin
-<irmin/*.ml{,i}>: pkg_lwt.syntax
-<irmin/*.ml{,i}>: pkg_lwt.unix
-<irmin/*.ml{,i}>: pkg_ocplib-endian
-<irmin/*.ml{,i}>: pkg_sockopt
-<irmin/*.ml{,i}>: pkg_tls.lwt
-<irmin/*.ml{,i}>: pkg_tuntap
-<irmin/*.ml{,i}>: use_llnet
 # Executable test_membership
 <test/test_membership.{native,byte}>: oasis_executable_test_membership_byte
 <test/*.ml{,i}>: oasis_executable_test_membership_byte
@@ -64,67 +49,6 @@
 <test/*.ml{,i}>: pkg_tls.lwt
 <test/*.ml{,i}>: pkg_tuntap
 <test/*.ml{,i}>: use_llnet
-# Executable test_ao
-<irmin_test/test_ao.{native,byte}>: oasis_executable_test_ao_byte
-<irmin_test/*.ml{,i}>: oasis_executable_test_ao_byte
-<irmin_test/test_ao.{native,byte}>: oasis_executable_test_ao_native
-<irmin_test/*.ml{,i}>: oasis_executable_test_ao_native
-<irmin_test/test_ao.{native,byte}>: pkg_ipaddr.unix
-<irmin_test/test_ao.{native,byte}>: pkg_irmin
-<irmin_test/test_ao.{native,byte}>: pkg_irmin.backend
-<irmin_test/test_ao.{native,byte}>: pkg_lwt.syntax
-<irmin_test/test_ao.{native,byte}>: pkg_lwt.unix
-<irmin_test/test_ao.{native,byte}>: pkg_ocplib-endian
-<irmin_test/test_ao.{native,byte}>: pkg_sockopt
-<irmin_test/test_ao.{native,byte}>: pkg_tls.lwt
-<irmin_test/test_ao.{native,byte}>: pkg_tuntap
-<irmin_test/test_ao.{native,byte}>: use_irmindistributed
-<irmin_test/test_ao.{native,byte}>: use_llnet
-# Executable test_irmin
-<irmin_test/test_irmin.{native,byte}>: oasis_executable_test_irmin_byte
-<irmin_test/*.ml{,i}>: oasis_executable_test_irmin_byte
-<irmin_test/test_irmin.{native,byte}>: oasis_executable_test_irmin_native
-<irmin_test/*.ml{,i}>: oasis_executable_test_irmin_native
-<irmin_test/test_irmin.{native,byte}>: pkg_ipaddr.unix
-<irmin_test/test_irmin.{native,byte}>: pkg_irmin
-<irmin_test/test_irmin.{native,byte}>: pkg_irmin.backend
-<irmin_test/test_irmin.{native,byte}>: pkg_irmin.unix
-<irmin_test/test_irmin.{native,byte}>: pkg_lwt.syntax
-<irmin_test/test_irmin.{native,byte}>: pkg_lwt.unix
-<irmin_test/test_irmin.{native,byte}>: pkg_ocplib-endian
-<irmin_test/test_irmin.{native,byte}>: pkg_sockopt
-<irmin_test/test_irmin.{native,byte}>: pkg_tls.lwt
-<irmin_test/test_irmin.{native,byte}>: pkg_tuntap
-<irmin_test/test_irmin.{native,byte}>: use_irmindistributed
-<irmin_test/test_irmin.{native,byte}>: use_llnet
-<irmin_test/*.ml{,i}>: pkg_irmin.unix
-# Executable test_rw
-<irmin_test/test_rw.{native,byte}>: oasis_executable_test_rw_byte
-<irmin_test/*.ml{,i}>: oasis_executable_test_rw_byte
-<irmin_test/test_rw.{native,byte}>: oasis_executable_test_rw_native
-<irmin_test/*.ml{,i}>: oasis_executable_test_rw_native
-<irmin_test/test_rw.{native,byte}>: pkg_ipaddr.unix
-<irmin_test/test_rw.{native,byte}>: pkg_irmin
-<irmin_test/test_rw.{native,byte}>: pkg_irmin.backend
-<irmin_test/test_rw.{native,byte}>: pkg_lwt.syntax
-<irmin_test/test_rw.{native,byte}>: pkg_lwt.unix
-<irmin_test/test_rw.{native,byte}>: pkg_ocplib-endian
-<irmin_test/test_rw.{native,byte}>: pkg_sockopt
-<irmin_test/test_rw.{native,byte}>: pkg_tls.lwt
-<irmin_test/test_rw.{native,byte}>: pkg_tuntap
-<irmin_test/test_rw.{native,byte}>: use_irmindistributed
-<irmin_test/test_rw.{native,byte}>: use_llnet
-<irmin_test/*.ml{,i}>: pkg_ipaddr.unix
-<irmin_test/*.ml{,i}>: pkg_irmin
-<irmin_test/*.ml{,i}>: pkg_irmin.backend
-<irmin_test/*.ml{,i}>: pkg_lwt.syntax
-<irmin_test/*.ml{,i}>: pkg_lwt.unix
-<irmin_test/*.ml{,i}>: pkg_ocplib-endian
-<irmin_test/*.ml{,i}>: pkg_sockopt
-<irmin_test/*.ml{,i}>: pkg_tls.lwt
-<irmin_test/*.ml{,i}>: pkg_tuntap
-<irmin_test/*.ml{,i}>: use_irmindistributed
-<irmin_test/*.ml{,i}>: use_llnet
 # OASIS_STOP
 <lib/*>: lwtbacktrace
 <irmin/*>: lwtbacktrace

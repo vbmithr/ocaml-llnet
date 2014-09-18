@@ -1,0 +1,12 @@
+PRJ llnet
+S lib
+S test
+B _build/lib
+B _build/test
+PKG ipaddr.unix
+PKG lwt.unix
+PKG ocplib-endian
+PKG ocplib-endian.bigstring
+PKG sockopt
+PKG tuntap
+PKG tls.lwt
