@@ -252,7 +252,7 @@ let connect
 
   (* react to incoming messages on the multicast network *)
   let react sock process =
-    let hdrbuf = String.create hdr_size in
+    let hdrbuf = Bytes.create hdr_size in
     let rec inner () =
       (* Read header only *)
       Lwt_unix.(recvfrom sock hdrbuf 0 hdr_size [MSG_PEEK]) >>= fun (nbread, saddr) ->
@@ -265,7 +265,7 @@ let connect
       else
         let msglen = hdr_size + (EndianString.BigEndian.get_int32 hdrbuf 20
                                  |> Int32.to_int) in
-        let buf = String.create msglen in
+        let buf = Bytes.create msglen in
         Lwt_unix.recvfrom group_sock buf 0 msglen [] >>= fun (nbread, _) ->
         if nbread <> msglen
         then
