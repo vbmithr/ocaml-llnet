@@ -1,6 +1,8 @@
 _build
-setup.exe
-setup.data
-setup.log
+tmp
+*~
+\.\#*
+\#*#
+*.install
 *.native
 *.byte

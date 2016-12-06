@@ -1,0 +1,7 @@
+description = "Local gossip network using IPv6 multicast"
+version = "%%VERSION%%"
+requires = "lwt.ppx ipaddr ocplib-endian sockopt"
+archive(byte) = "llnet.cma"
+archive(native) = "llnet.cmxa"
+plugin(byte) = "llnet.cma"
+plugin(native) = "llnet.cmxs"

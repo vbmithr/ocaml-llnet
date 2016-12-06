@@ -1,16 +1,19 @@
 opam-version: "1.2"
-name: "llnet"
-version: "0.1"
 maintainer: "Vincent Bernardoff <vb@luminar.eu.org>"
-authors: "Vincent Bernardoff <vb@luminar.eu.org>"
-homepage: "http://github.com/vbmithr/ocaml-llnet"
-bug-reports: "http://github.com/vbmithr/ocaml-llnet/issues"
-dev-repo: "git://github.com/vbmithr/ocaml-llnet"
+authors: ["Vincent Bernardoff <vb@luminar.eu.org>"]
+homepage: "https://github.com/vbmithr/llnet"
+doc: "https://vbmithr.github.io/llnet/doc"
 license: "ISC"
-build: [
-  ["./configure" "--prefix %{prefix}%"]
-  [make]
+dev-repo: "https://github.com/vbmithr/llnet.git"
+bug-reports: "https://github.com/vbmithr/llnet/issues"
+tags: []
+available: [ ocaml-version >= "4.01.0"]
+depends: [
+  "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "topkg" {build}
 ]
-install: [make "install"]
-remove: ["ocamlfind" "remove" "llnet"]
-depends: ["ocamlfind" {build} "ipaddr" "lwt" "ocplib-endian" "tuntap" "tls" "sockopt"]
+depopts: []
+build:
+[[ "ocaml" "pkg/pkg.ml" "build"
+           "--pinned" "%{pinned}%" ]]

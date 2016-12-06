@@ -1,12 +1,4 @@
-PRJ llnet
-S lib
+PKG bytes lwt.ppx ipaddr ocplib-endian sockopt tuntap
+S src
 S test
-B _build/lib
-B _build/test
-PKG ipaddr.unix
-PKG lwt.unix
-PKG ocplib-endian
-PKG ocplib-endian.bigstring
-PKG sockopt
-PKG tuntap
-PKG tls.lwt
+B _build/**

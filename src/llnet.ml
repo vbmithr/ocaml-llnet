@@ -1,3 +1,9 @@
+(*---------------------------------------------------------------------------
+   Copyright (c) 2016 Vincent Bernardoff. All rights reserved.
+   Distributed under the ISC license, see terms at the end of the file.
+   %%NAME%% %%VERSION%%
+  ---------------------------------------------------------------------------*)
+
 (* GLOBAL CONFIG *)
 
 let init_ttl = 5
@@ -15,8 +21,7 @@ size: 4 bytes, message size not including the header, big endian
 
 (*****************)
 
-let (>>=) = Lwt.(>>=)
-let (>|=) = Lwt.(>|=)
+open Lwt.Infix
 
 let section = Lwt_log.Section.make "Llnet"
 
@@ -118,21 +123,23 @@ let connect
      IPv4. *)
 
   let my_ipaddr =
-    let open Tuntap in
-    let ifaddrs = List.filter
-        (fun { name; ipaddr } -> name = iface) (Tuntap.getifaddrs ()) in
-    let ifaddrs = List.fast_sort (fun a b -> match a, b with
-        | {name=_; ipaddr=AF_INET _}, {name=_; ipaddr=AF_INET6 _} -> -1
-        | {name=_; ipaddr=AF_INET6 _}, {name=_; ipaddr=AF_INET _} -> 1
-        | _ -> 0) ifaddrs in
+    let ifaddrs =
+      List.filter (fun (name, ipaddr) -> name = iface) (Tuntap.getifaddrs ())
+    in
+    let ifaddrs =
+      ListLabels.fast_sort ifaddrs ~cmp:(fun a b -> match a, b with
+          | (_, `V4 _), (_, `V6 _) -> -1
+          | (_, `V6 _), (_, `V4 _) -> 1
+          | _ -> 0)
+    in
     match ifaddrs with
     | [] ->
         failwith
           (Printf.sprintf "Interface %s has no usable IP address associated" iface)
-    | {name; ipaddr}::_ ->
+    | (name, ipaddr) :: _ ->
         (match ipaddr with
-         | Tuntap.AF_INET (ip, _) -> Ipaddr_unix.V4.to_inet_addr ip
-         | Tuntap.AF_INET6 (ip, _) -> Ipaddr_unix.V6.to_inet_addr ip
+         | `V4 (ip, _) -> Ipaddr_unix.V4.to_inet_addr ip
+         | `V6 (ip, _) -> Ipaddr_unix.V6.to_inet_addr ip
         )
   in
 
@@ -144,8 +151,8 @@ let connect
   Unix.(setsockopt group_sock SO_REUSEADDR true);
   Unix.(setsockopt tcp_in_sock SO_REUSEADDR true);
 
-  Sockopt.bind ~iface group_sock group_saddr;
-  Sockopt.membership ~iface group_sock group_addr `Join;
+  Sockopt.Unix.bind ~iface group_sock group_saddr;
+  Sockopt.Unix.membership ~iface group_sock group_addr `Join;
 
   Unix.(bind tcp_in_sock (ADDR_INET(inet6_addr_any, tcp_port)));
 
@@ -176,7 +183,7 @@ let connect
 
   Lwt_log.ign_debug_f ~section "Bound TCP port %d" tcp_port;
 
-  let idmsg = String.make hdr_size '\000'in
+  let idmsg = Bytes.make hdr_size '\000'in
   (match Ipaddr_unix.of_inet_addr my_ipaddr with
   | Ipaddr.V4 addr -> Ipaddr.V4.to_bytes_raw addr idmsg 14
   | Ipaddr.V6 addr -> Ipaddr.V6.to_bytes_raw addr idmsg 2);
@@ -195,7 +202,7 @@ let connect
           | _ -> a
         ) h.peers SaddrMap.empty;
       EndianString.BigEndian.set_int16 idmsg 0 (int_of_typ PING);
-      Lwt_unix.sendto group_sock idmsg 0 (String.length idmsg) [] h.group_saddr >>= fun (_:int) ->
+      Lwt_unix.sendto group_sock idmsg 0 (Bytes.length idmsg) [] h.group_saddr >>= fun (_:int) ->
       Lwt_unix.sleep ival >>= fun () -> inner (succ n)
     in inner 0
   in
@@ -263,7 +270,7 @@ let connect
           inner ()
         )
       else
-        let msglen = hdr_size + (EndianString.BigEndian.get_int32 hdrbuf 20
+        let msglen = hdr_size + (EndianBytes.BigEndian.get_int32 hdrbuf 20
                                  |> Int32.to_int) in
         let buf = Bytes.create msglen in
         Lwt_unix.recvfrom group_sock buf 0 msglen [] >>= fun (nbread, _) ->
@@ -276,7 +283,7 @@ let connect
           )
         else
           (
-            process h buf;
+            process h @@ Bytes.unsafe_to_string buf;
             inner ()
           )
     in inner ()
@@ -327,3 +334,19 @@ let neighbours h =
   then Lwt_condition.wait h.not_alone
   else Lwt.return true)
   >>= fun _ -> neighbours_nonblock h |> Lwt.return
+
+(*---------------------------------------------------------------------------
+   Copyright (c) 2016 Vincent Bernardoff
+
+   Permission to use, copy, modify, and/or distribute this software for any
+   purpose with or without fee is hereby granted, provided that the above
+   copyright notice and this permission notice appear in all copies.
+
+   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+   WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+   ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+   WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+   ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ---------------------------------------------------------------------------*)
